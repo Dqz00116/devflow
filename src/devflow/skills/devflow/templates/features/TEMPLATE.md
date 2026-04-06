@@ -9,16 +9,18 @@ created: YYYY-MM-DD
 
 ## Description
 
-<!-- Describe the feature implementation here -->
-<!-- What does this feature do? -->
-<!-- How does it relate to the requirement? -->
+<!-- Describe the technical implementation -->
+<!-- How does this satisfy the requirement? -->
+<!-- What is the architecture/approach? -->
+
+**Related Requirement**: REQ-XXX
 
 ## Implementation
 
 ### File Structure
 
 ```
-<!-- Add file structure -->
+<!-- Add actual file structure after implementation -->
 src/
 ├── Module/
 │   ├── Feature.cs
@@ -38,8 +40,16 @@ src/
 ## Tests
 
 ```python
-# Add test examples
+# Add test examples showing the feature works
 ```
+
+## Completion Criteria
+
+<!-- Checklist for marking this FEAT as implemented -->
+- [ ] Code implemented
+- [ ] Tests passing
+- [ ] Documentation updated
+- [ ] Code reviewed
 
 ## Integration
 
@@ -48,3 +58,8 @@ src/
 ## Notes
 
 <!-- Additional implementation notes, design decisions, etc. -->
+
+---
+
+**When to mark as implemented**: After all completion criteria are met and code is verified.
+**Next step**: Mark REQ-XXX as done.

@@ -89,12 +89,20 @@ flowchart LR
 7. **Get explicit user confirmation** on final design → Status: APPROVED
 8. Proceed to Stage 2 (Writing Plans)
 
+**After Requirement Approved**:
+
+Create Feature document for technical implementation:
+```bash
+devflow feat new FEAT-001 -r REQ-001 -t "Database Module"
+```
+
 **IMPORTANT**: Do NOT proceed to Stage 2 until:
 - [ ] User has confirmed the final design
 - [ ] Requirement document is updated with confirmed design details
 - [ ] Status is set to APPROVED
+- [ ] Feature (FEAT) is created for technical implementation
 
-**Traceability**: REQ-XXX → Design Doc → Plan Doc → Implementation
+**Traceability**: REQ-XXX → FEAT-XXX → Design Doc → Plan Doc → Implementation
 
 </details>
 

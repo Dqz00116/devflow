@@ -94,10 +94,22 @@ Stage 1: Brainstorming → Update REQ with design
     ↓
 Status: approved
     ↓
-Stage 2-7: Implementation
+Create FEAT-XXX for technical implementation
     ↓
-Status: done
+FEAT Status: implemented (implementation complete)
+    ↓
+Create TASK-XXX for tracking work
+    ↓
+All TASKs done
+    ↓
+REQ Status: done
 ```
+
+**Key Points**:
+- **REQ** captures the business requirement and design
+- **FEAT** documents the technical implementation (required before marking REQ done)
+- **TASK** tracks actual work items during implementation
+- REQ can only be marked **done** after FEAT is **implemented**
 
 ## Listing Requirements
 
@@ -117,12 +129,25 @@ devflow req show REQ-001
 1. **One requirement per feature** - Don't bundle unrelated features
 2. **Clear acceptance criteria** - Define "done" upfront
 3. **Link design docs** - Reference specs in the requirement
-4. **Update status promptly** - Keep status accurate
-5. **Archive done requirements** - Keep as record, don't delete
+4. **Create FEAT after REQ approved** - Technical implementation must be documented
+5. **FEAT must be implemented before REQ done** - FEAT is the implementation record
+6. **Update status promptly** - Keep status accurate
+7. **Archive done requirements** - Keep as record, don't delete
+
+## Feature (FEAT) vs Requirement (REQ)
+
+| Aspect | REQ | FEAT |
+|--------|-----|------|
+| **Purpose** | Business requirement | Technical implementation |
+| **Created when** | After idea capture | After REQ approved |
+| **Contains** | What & Why | How (code, architecture) |
+| **Required for** | Planning & tracking | Implementation record |
+| **Must complete before** | Design approval | REQ can be marked done |
 
 ---
 
 See also:
 - [WORKFLOW.md](WORKFLOW.md) - Complete development workflow
 - [AGENTS.md](../AGENTS.md) - Project context
-- [TEMPLATE](requirements/TEMPLATE.md) - Requirement template
+- [features/TEMPLATE.md](features/TEMPLATE.md) - Feature template
+- [requirements/TEMPLATE.md](requirements/TEMPLATE.md) - Requirement template

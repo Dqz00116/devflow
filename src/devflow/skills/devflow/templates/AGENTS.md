@@ -32,9 +32,13 @@ This file provides context for AI agents working on this project.
 ├── {{ paths.docs }}/      # Documentation
 │   ├── WORKFLOW.md        # Development workflow
 │   ├── REQUIREMENTS.md    # Requirements guide
+│   ├── CLI.md             # CLI reference
 │   ├── requirements/      # Requirement files
 │   │   ├── TEMPLATE.md
 │   │   └── REQ-*.md
+│   ├── features/          # Feature implementation docs
+│   │   ├── TEMPLATE.md
+│   │   └── FEAT-*.md
 │   └── superpowers/       # Design docs & plans
 │       ├── specs/
 │       └── plans/
