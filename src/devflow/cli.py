@@ -1,17 +1,54 @@
-"""Main CLI entry point for DevFlow."""
+"""Main CLI entry point for DevFlow v2.0 - Progressive Workflow."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 from rich.console import Console
 
 from devflow import __version__
 from devflow.config import DevFlowConfig
+from devflow.state_store import StateStore
+from devflow.workflow_engine import WorkflowEngine
+
+if TYPE_CHECKING:
+    pass
 
 console = Console()
+
+
+def ensure_workflow(workflow_id: str | None = None) -> WorkflowEngine | None:
+    """Ensure workflow exists and return engine.
+
+    Args:
+        workflow_id: Specific workflow ID to use, or None to use saved/first
+
+    Returns:
+        WorkflowEngine instance or None
+    """
+    project_root = Path.cwd()
+
+    if workflow_id:
+        engine = WorkflowEngine.from_workflow(workflow_id, project_root)
+        if not engine:
+            console.print(f"[red]Error: Workflow '{workflow_id}' not found.[/red]")
+            return None
+        return engine
+
+    # Try to get saved workflow or first available
+    engine = WorkflowEngine.from_project(project_root)
+    if not engine:
+        console.print("[red]Error: No workflows found.[/red]")
+        console.print("Expected: .devflow/workflows/*.toml")
+        console.print("")
+        console.print("Create a workflow file or run:")
+        console.print("  devflow list-workflows")
+        return None
+
+    return engine
 
 
 @click.group()
@@ -73,7 +110,7 @@ def init(
 
 @cli.group()
 def req() -> None:
-    """Manage requirements."""
+    """[Legacy] Manage requirements. Prefer workflow commands (current/done)."""
     pass
 
 
@@ -146,7 +183,7 @@ def req_status(ctx: click.Context, req_id: str, new_status: str) -> None:
 
 @cli.group()
 def task() -> None:
-    """Manage tasks."""
+    """[Legacy] Manage tasks. Prefer workflow commands (current/done)."""
     pass
 
 
@@ -215,7 +252,7 @@ def task_done(ctx: click.Context, task_id: str) -> None:
 
 @cli.group()
 def feat() -> None:
-    """Manage features."""
+    """[Legacy] Manage features. Prefer workflow commands (current/done)."""
     pass
 
 
@@ -329,26 +366,193 @@ def validate(ctx: click.Context) -> None:
     console.print(f"[green]✓[/green] Project: {config.project.name}")
     console.print(f"[green]✓[/green] Language: {config.project.language}")
 
-    # Check required files
+    # Check v2 required structure
     project_root = config_path.parent.parent
-    required_files = [
-        project_root / "docs" / "WORKFLOW.md",
-        project_root / "AGENTS.md",
-        project_root / "docs" / "REQUIREMENTS.md",
-    ]
+    workflows_dir = project_root / ".devflow" / "workflows"
+    agents_file = project_root / "AGENTS.md"
 
     all_valid = True
-    for file_path in required_files:
-        if file_path.exists():
-            console.print(f"[green]✓[/green] {file_path.name}")
+
+    # Check workflow directory
+    if workflows_dir.exists():
+        toml_files = list(workflows_dir.glob("*.toml"))
+        if toml_files:
+            console.print(f"[green]✓[/green] Workflows: {len(toml_files)} found")
         else:
-            console.print(f"[red]✗[/red] {file_path.name} (missing)")
+            console.print("[red]✗[/red] No workflow TOML files found in .devflow/workflows/")
             all_valid = False
+    else:
+        console.print("[red]✗[/red] .devflow/workflows/ directory missing")
+        all_valid = False
+
+    # Check AGENTS.md
+    if agents_file.exists():
+        console.print("[green]✓[/green] AGENTS.md")
+    else:
+        console.print("[yellow]✗[/yellow] AGENTS.md (missing, recommended)")
+        # Not critical for v2
+
+    # Check config has test command
+    if config.commands.test:
+        console.print(f"[green]✓[/green] Test command: {config.commands.test}")
+    else:
+        console.print("[yellow]✗[/yellow] Test command not configured (set in .devflow/config.toml)")
 
     if all_valid:
         console.print("\n[green]All validations passed![/green]")
     else:
-        console.print("\n[yellow]Some files are missing. Run 'devflow init' to create them.[/yellow]")
+        console.print("\n[yellow]Some issues found. Run 'devflow init' to create missing files.[/yellow]")
+
+
+# ============================================================================
+# Workflow v2 Commands - Progressive Disclosure
+# ============================================================================
+
+@cli.command()
+@click.option("--workflow", "-w", help="Workflow ID to use")
+def current(workflow: str | None) -> None:
+    """Get current step instruction.
+
+    This is the primary command for AI agents.
+    Run this first to know what to do.
+    """
+    engine = ensure_workflow(workflow)
+    if not engine:
+        return
+
+    instruction = engine.format_current_instruction()
+    console.print(instruction, markup=False)
+
+
+@cli.command()
+def done() -> None:
+    """Mark current step done and advance.
+
+    Checks gate conditions and advances to next step if all pass.
+    On failure, checks fail_routes and reroutes if applicable.
+    """
+    engine = ensure_workflow()
+    if not engine:
+        return
+
+    # advance() checks gates and handles both pass (advance) and fail (route/retry)
+    success, next_step, message = engine.advance()
+
+    if "complete" in message.lower():
+        console.print(engine.format_done_result(), markup=False)
+        console.print("")
+        console.print("[green]Workflow complete![/green]")
+    elif success and next_step:
+        console.print(engine.format_done_result(), markup=False)
+        console.print("")
+        console.print(engine.format_current_instruction(), markup=False)
+    else:
+        # Gates failed, no route matched
+        console.print(engine.format_done_result(), markup=False)
+
+
+@cli.command("workflow-status")
+def workflow_status() -> None:
+    """Show workflow status."""
+    engine = ensure_workflow()
+    if not engine:
+        return
+
+    console.print(engine.format_status(), markup=False)
+
+
+@cli.command("list-workflows")
+def list_workflows() -> None:
+    """List all available workflows."""
+    workflows = WorkflowEngine.discover_workflows()
+
+    if not workflows:
+        console.print("[yellow]No workflows found.[/yellow]")
+        console.print("")
+        console.print("Create workflow files in .devflow/workflows/*.toml")
+        return
+
+    console.print("[bold]Available Workflows:[/bold]")
+    console.print("")
+
+    state = StateStore.from_project()
+    current_workflow = state.current_workflow
+
+    for i, (workflow_id, path) in enumerate(workflows, 1):
+        marker = "→" if workflow_id == current_workflow else " "
+        console.print(f"{marker} {i}. [cyan]{workflow_id}[/cyan]")
+        console.print(f"   Path: {path}")
+        console.print("")
+
+    console.print("Use [bold]devflow select-workflow <id>[/bold] to choose")
+
+
+@cli.command("select-workflow")
+@click.argument("workflow_id")
+def select_workflow(workflow_id: str) -> None:
+    """Select and start a workflow.
+
+    Args:
+        workflow_id: Workflow ID to select (e.g., MODE-A, MODE-B)
+    """
+    engine = WorkflowEngine.from_workflow(workflow_id, Path.cwd())
+
+    if not engine:
+        console.print(f"[red]Error: Workflow '{workflow_id}' not found.[/red]")
+        console.print("")
+        console.print("Run [bold]devflow list-workflows[/bold] to see available workflows")
+        return
+
+    console.print(f"[green]Selected workflow: {workflow_id}[/green]")
+    console.print("")
+    console.print(engine.format_current_instruction(), markup=False)
+
+
+@cli.command()
+@click.argument("item")
+def approve(item: str) -> None:
+    """Mark an item as user-approved.
+
+    Args:
+        item: Item to approve (e.g., REQ-001, DESIGN-001)
+    """
+    state = StateStore.from_project()
+    approved_items = state.get("approved_items", [])
+    if item not in approved_items:
+        approved_items.append(item)
+        state.set("approved_items", approved_items)
+    console.print(f"[green]Approved: {item}[/green]")
+
+
+@cli.command()
+@click.argument("key")
+@click.argument("value")
+def set(key: str, value: str) -> None:
+    """Set a state variable.
+
+    Args:
+        key: Variable name
+        value: Variable value
+    """
+    state = StateStore.from_project()
+    state.set(key, value)
+    console.print(f"[green]Set: {key}={value}[/green]")
+
+
+@cli.command()
+def back() -> None:
+    """Go back to the previous step."""
+    engine = ensure_workflow()
+    if not engine:
+        return
+
+    success, prev_step, message = engine.go_back()
+    if success and prev_step:
+        console.print(f"[yellow]{message}[/yellow]")
+        console.print("")
+        console.print(engine.format_current_instruction(), markup=False)
+    else:
+        console.print(f"[yellow]{message}[/yellow]")
 
 
 def main() -> None:

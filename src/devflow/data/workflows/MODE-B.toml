@@ -1,0 +1,158 @@
+# MODE-B: Debug Workflow (4 Phases + Phase 4.5)
+# Maps to: AI Agent Development Workflow - MODE B
+# Version: 2.0
+# File naming: All files use {workflow_run_id} variable
+#
+# Config variables (resolved from .devflow/config.toml):
+#   {test_command}            - e.g. "pytest", "go test ./..."
+#   {lint_command}            - e.g. "ruff check ."
+
+[workflow]
+id = "MODE-B"
+name = "Debug Workflow"
+description = "Systematic debugging for bugs, errors, and unexpected behavior"
+version = "2.0"
+extends = []
+
+# Phase 1: Root Cause Investigation
+[[steps]]
+id = "debug-root-cause"
+name = "Root Cause Investigation"
+prompt_file = "prompts/debug-root-cause.md"
+gates = ["file_exists:docs/debug/ROOT-CAUSE-{workflow_run_id}.md"]
+next = "debug-pattern"
+
+# Phase 2: Pattern Analysis
+[[steps]]
+id = "debug-pattern"
+name = "Pattern Analysis"
+prompt_file = "prompts/debug-pattern.md"
+gates = ["file_exists:docs/debug/PATTERN-{workflow_run_id}.md"]
+next = "debug-hypothesis"
+
+# Phase 3: Hypothesis & Testing
+[[steps]]
+id = "debug-hypothesis"
+name = "Form and Test Hypothesis"
+prompt_file = "prompts/debug-hypothesis.md"
+gates = ["file_exists:docs/debug/HYPOTHESIS-{workflow_run_id}.md"]
+next = "debug-fix"
+
+[[steps.fail_route]]
+min_fails = 1
+target = "debug-root-cause"
+
+# Phase 4: Implementation
+[[steps]]
+id = "debug-fix"
+name = "Implement Fix"
+prompt_file = "prompts/debug-fix.md"
+gates = ["command_success:{test_command}"]
+next = "debug-verify"
+
+[[steps.fail_route]]
+min_fails = 1
+max_fails = 2
+target = "debug-root-cause"
+
+[[steps.fail_route]]
+min_fails = 3
+target = "debug-question"
+
+# Phase 4.5: Question Architecture (reached via fail_route after 3 failures)
+[[steps]]
+id = "debug-question"
+name = "Question Architecture"
+prompt = """
+## Phase 4.5: Question Architecture
+
+**STOP!** 3+ fix attempts failed.
+
+Before continuing, discuss with human:
+
+### Questions:
+1. Is the pattern fundamentally sound?
+2. Are we continuing from inertia?
+3. Should we refactor vs fix symptoms?
+
+### Actions:
+- Present findings to user
+- Get guidance on approach
+- Decide: Refactor / Fix / Abandon
+
+**Do not proceed without human input!**
+
+After discussion, run `devflow approve ARCHITECTURE-REVIEW-{workflow_run_id}`
+to confirm the decision, then `devflow done` to continue.
+"""
+gates = ["user_approved:ARCHITECTURE-REVIEW-{workflow_run_id}"]
+next = "debug-root-cause"
+
+# Verification
+[[steps]]
+id = "debug-verify"
+name = "Verify Fix"
+prompt = """
+## Verify Fix and Prevent Regression
+
+Ensure fix is complete and won't regress.
+
+### Output File
+ docs/debug/VERIFICATION-{workflow_run_id}.md
+
+### Tasks:
+1. Comprehensive testing:
+   - Original failing test passes
+   - Edge cases tested
+   - Related functionality tested
+   - Full test suite passes
+
+2. Document verification
+
+3. Consider prevention:
+   - Add regression test?
+   - Improve error messages?
+   - Update documentation?
+
+### After Debug:
+**MUST repeat MODE-A stages 2-7:**
+plan → implement → review → test → verify → finish
+
+### Gate:
+- VERIFICATION-{workflow_run_id}.md created
+"""
+gates = [
+    "file_exists:docs/debug/VERIFICATION-{workflow_run_id}.md",
+    "command_success:{test_command}",
+]
+next = "debug-finish"
+
+# Complete debug workflow → transition to MODE-A
+[[steps]]
+id = "debug-finish"
+name = "Complete Debug"
+prompt = """
+## Debug Workflow Complete
+
+Summarize and complete the debug process.
+
+### Output File
+ docs/debug/COMPLETION-{workflow_run_id}.md
+
+### Tasks:
+1. Create completion summary
+
+2. Update related requirements (if applicable)
+
+3. Present to user:
+   "Bug fixed! Summary:
+    - Root cause: [brief]
+    - Fix applied: [brief]
+    - All tests pass"
+
+### Next Steps:
+You will automatically transition to MODE-A to ensure proper
+planning, review, and verification of the fix.
+"""
+gates = ["file_exists:docs/debug/COMPLETION-{workflow_run_id}.md"]
+next = "MODE-A:write-plan"  # Cross-workflow: post-debug requires full MODE-A stages 2-7

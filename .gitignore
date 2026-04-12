@@ -40,3 +40,6 @@ htmlcov/
 
 # DevFlow test projects
 test_project_*/
+
+# DevFlow runtime state
+.devflow/state.toml

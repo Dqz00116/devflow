@@ -52,6 +52,9 @@ Repository = "https://github.com/devflow/devflow"
 [tool.hatch.build.targets.wheel]
 packages = ["src/devflow"]
 
+[tool.hatch.build.targets.wheel.shared-data]
+"src/devflow/data" = "devflow/data"
+
 [tool.black]
 line-length = 100
 target-version = ["py39", "py310", "py311", "py312"]
