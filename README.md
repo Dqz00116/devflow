@@ -29,6 +29,8 @@ pip install -e .
 ## Quick Start
 
 > **If `.devflow/` already exists in the project, skip `init` and use it directly.**
+>
+> **`devflow init` copies workflows and prompts from the DevFlow repository's own `.devflow/` as the template.**
 
 ```bash
 # Only run init if .devflow/ does NOT already exist

@@ -31,6 +31,8 @@ pip install -e .
 ### 2. Initialize Project (Skip if `.devflow/` already exists)
 
 > **Agent rule: If `.devflow/` already exists in the current project, do NOT run `init`. Use the existing workflows directly.**
+>
+> **`devflow init` uses the DevFlow repository's own `.devflow/` as the template for workflows and prompts.**
 
 ```bash
 # Only run this if .devflow/ is NOT present

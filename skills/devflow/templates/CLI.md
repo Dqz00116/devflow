@@ -23,6 +23,8 @@ pip install -e .
 ## Getting Started
 
 > **Agent rule: Always check if `.devflow/` already exists before running `devflow init`. If it exists, use the existing workflows directly with `devflow list-workflows`.**
+>
+> **`devflow init` uses the DevFlow repository's own `.devflow/` as the template for workflows and prompts.**
 
 ## Global Options
 

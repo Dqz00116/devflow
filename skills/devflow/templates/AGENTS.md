@@ -56,6 +56,8 @@ This project uses DevFlow for structured development.
 ### Quick Start
 
 > **Important: If `.devflow/` already exists in this project, use it directly. Do NOT run `devflow init`.**
+>
+> **`devflow init` copies workflows and prompts from the DevFlow repository's own `.devflow/` as the template.**
 
 ```bash
 # Check for existing workflows first

@@ -71,6 +71,18 @@ PROJECT_TEMPLATES: dict[str, Path] = {
 }
 
 
+def get_repo_devflow_dir() -> Path | None:
+    """Get the .devflow directory from the DevFlow repository itself (if available).
+
+    When running from the DevFlow source repository, __file__ is at
+    src/devflow/template.py, so the repo root is 3 parents up.
+    """
+    candidate = Path(__file__).parent.parent.parent / ".devflow"
+    if candidate.exists() and (candidate / "workflows").exists():
+        return candidate
+    return None
+
+
 def get_data_dir() -> Path:
     """Get the directory containing bundled workflow/prompt data."""
     return Path(__file__).parent / "data"
@@ -87,9 +99,17 @@ def init_project_templates(project_root: Path, config: DevFlowConfig) -> list[Pa
             copy_template(template_name, dest_path, config)
             created_files.append(dest_path)
 
-    # Copy workflow files from bundled data
-    data_dir = get_data_dir()
-    workflows_dir = data_dir / "workflows"
+    # Prefer the DevFlow repository's own .devflow/ as a template
+    repo_devflow = get_repo_devflow_dir()
+    if repo_devflow:
+        workflows_dir = repo_devflow / "workflows"
+        prompts_dir = repo_devflow / "prompts"
+    else:
+        # Fallback to bundled data when installed as a package
+        data_dir = get_data_dir()
+        workflows_dir = data_dir / "workflows"
+        prompts_dir = data_dir / "prompts"
+
     if workflows_dir.exists():
         for toml_file in workflows_dir.glob("*.toml"):
             dest_path = project_root / ".devflow" / "workflows" / toml_file.name
@@ -98,8 +118,6 @@ def init_project_templates(project_root: Path, config: DevFlowConfig) -> list[Pa
                 dest_path.write_text(toml_file.read_text(encoding="utf-8"), encoding="utf-8")
                 created_files.append(dest_path)
 
-    # Copy prompt files from bundled data
-    prompts_dir = data_dir / "prompts"
     if prompts_dir.exists():
         for md_file in prompts_dir.glob("*.md"):
             dest_path = project_root / ".devflow" / "prompts" / md_file.name
