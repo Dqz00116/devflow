@@ -1,0 +1,153 @@
+# MODE-A: Feature Development Workflow (8 Stages)
+# Maps to: AI Agent Development Workflow - MODE A
+# Version: 2.0
+# File naming: All files use {workflow_run_id} variable
+#
+# Config variables (resolved from .devflow/config.toml):
+#   {test_command}            - e.g. "pytest", "go test ./..."
+#   {test_unit_command}       - e.g. "pytest tests/unit"
+#   {test_integration_command} - e.g. "pytest tests/integration"
+#   {lint_command}            - e.g. "ruff check ."
+
+[workflow]
+id = "MODE-A"
+name = "Feature Development Workflow"
+description = "Complete feature development from requirement to delivery"
+version = "2.0"
+
+# Stage 0: Requirement
+[[steps]]
+id = "req-create"
+name = "Create Requirement"
+prompt_file = "prompts/req-create.md"
+gates = ["file_exists:docs/requirements/REQ-{workflow_run_id}.md"]
+next = "req-approve"
+
+[[steps]]
+id = "req-approve"
+name = "Approve Requirement"
+prompt = """
+## Stage 0: Requirement Approval
+
+Requirement must be approved before proceeding to design.
+
+### Current File
+ docs/requirements/REQ-{workflow_run_id}.md
+
+### Tasks:
+1. Present REQ-{workflow_run_id}.md to user:
+   - Summarize key points
+   - Highlight acceptance criteria
+   - Explain scope
+
+2. Ask clarifying questions ONE AT A TIME
+
+3. **Get explicit user confirmation** on final design
+
+4. Update requirement:
+   - Add confirmed design details
+   - Status: APPROVED
+
+5. Create feature document for technical implementation:
+   - Create: docs/features/FEAT-{workflow_run_id}.md
+   - Document technical approach and architecture
+
+### Gate Conditions:
+- User has confirmed final design
+- REQ-{workflow_run_id}.md has status: approved
+- FEAT-{workflow_run_id}.md created for traceability
+
+**Do NOT proceed without explicit user approval!**
+"""
+gates = [
+    "file_exists:docs/requirements/REQ-{workflow_run_id}.md",
+    "file_contains:docs/requirements/REQ-{workflow_run_id}.md:status: approved",
+    "file_exists:docs/features/FEAT-{workflow_run_id}.md",
+]
+next = "brainstorm"
+
+# Stage 1: Brainstorming
+[[steps]]
+id = "brainstorm"
+name = "Brainstorm Design Solutions"
+prompt_file = "prompts/brainstorm.md"
+gates = ["file_exists:docs/superpowers/specs/DESIGN-{workflow_run_id}.md"]
+next = "write-plan"
+
+# Stage 2: Writing Plans
+[[steps]]
+id = "write-plan"
+name = "Write Implementation Plan"
+prompt_file = "prompts/write-plan.md"
+gates = ["file_exists:docs/superpowers/plans/PLAN-{workflow_run_id}.md"]
+next = "implement-tdd"
+
+# Stage 3: Implementation
+[[steps]]
+id = "implement-tdd"
+name = "Implement with TDD"
+prompt_file = "prompts/implement-tdd.md"
+gates = ["command_success:{test_command}"]
+next = "code-review"
+
+# Stage 4: Code Review
+[[steps]]
+id = "code-review"
+name = "Code Review"
+prompt_file = "prompts/code-review.md"
+gates = ["user_approved:CODE-REVIEW-{workflow_run_id}"]
+next = "test-run"
+
+# Stage 5: Testing
+[[steps]]
+id = "test-run"
+name = "Run All Tests"
+prompt = """
+## Stage 5: Testing
+
+Run complete test suite and ensure all pass.
+
+### Commands:
+```bash
+{test_command}                     # All tests
+{test_unit_command}                # Unit tests
+{test_integration_command}         # Integration tests
+```
+
+### Constraints Check:
+- ZERO warnings (if enforced)
+- ZERO mocks (if required)
+- All tests pass
+
+### Fix failures:
+- Fix code if tests fail
+- Fix tests if they're wrong
+- Ask user if uncertain
+
+### Ensure no regressions
+"""
+gates = [
+    "command_success:{test_command}",
+    "command_success:{test_unit_command}",
+    "command_success:{test_integration_command}",
+]
+next = "verify"
+
+# Stage 6: Verification
+[[steps]]
+id = "verify"
+name = "Verify and Collect Evidence"
+prompt_file = "prompts/verify.md"
+gates = ["file_exists:docs/evidence/EVIDENCE-{workflow_run_id}.md"]
+next = "finish"
+
+# Stage 7: Finish
+[[steps]]
+id = "finish"
+name = "Finish and Deliver"
+prompt_file = "prompts/finish.md"
+gates = [
+    "file_exists:docs/completion/COMPLETION-{workflow_run_id}.md",
+    "file_contains:docs/requirements/REQ-{workflow_run_id}.md:status: done",
+]
+next = ""  # Workflow complete

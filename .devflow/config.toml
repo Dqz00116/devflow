@@ -1,0 +1,25 @@
+[project]
+name = "DevFlow"
+language = "python"
+stack = "Python 3.x"
+version = "0.1.0"
+
+[commands]
+build = "python -m build"
+test = "pytest"
+lint = "ruff check ."
+test_unit = "pytest tests/unit -v"
+test_integration = "pytest tests/integration -v"
+
+[paths]
+src = "src"
+tests = "tests"
+docs = "docs"
+
+[constraints]
+zero_warnings = true
+zero_mocks = false
+nullable = true
+
+[workflow]
+stages = [ "backlog", "analyzing", "analyzed", "approved", "in_progress", "done",]
