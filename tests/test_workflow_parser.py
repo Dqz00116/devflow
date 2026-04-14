@@ -77,7 +77,7 @@ next = ""
         finally:
             os.unlink(p)
 
-    def test_min_fails_less_than_1_rejected(self, capsys) -> None:
+    def test_min_fails_less_than_1_rejected(self, caplog) -> None:
         toml = """
 [workflow]
 id = "t"
@@ -102,8 +102,7 @@ next = ""
         try:
             w = parse_workflow(p)
             assert len(w.get_step("s1").fail_routes) == 0
-            captured = capsys.readouterr()
-            assert "min_fails (0) < 1" in captured.out
+            assert "min_fails (0) < 1" in caplog.text
         finally:
             os.unlink(p)
 
@@ -135,7 +134,7 @@ next = ""
         finally:
             os.unlink(p)
 
-    def test_empty_target_rejected(self, capsys) -> None:
+    def test_empty_target_rejected(self, caplog) -> None:
         toml = """
 [workflow]
 id = "t"
@@ -160,12 +159,11 @@ next = ""
         try:
             w = parse_workflow(p)
             assert len(w.get_step("s1").fail_routes) == 0
-            captured = capsys.readouterr()
-            assert "empty target" in captured.out
+            assert "empty target" in caplog.text
         finally:
             os.unlink(p)
 
-    def test_min_fails_greater_than_max_fails_rejected(self, capsys) -> None:
+    def test_min_fails_greater_than_max_fails_rejected(self, caplog) -> None:
         toml = """
 [workflow]
 id = "t"
@@ -191,8 +189,7 @@ next = ""
         try:
             w = parse_workflow(p)
             assert len(w.get_step("s1").fail_routes) == 0
-            captured = capsys.readouterr()
-            assert "min_fails (5) > max_fails (2)" in captured.out
+            assert "min_fails (5) > max_fails (2)" in caplog.text
         finally:
             os.unlink(p)
 

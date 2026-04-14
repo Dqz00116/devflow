@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import toml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -120,25 +123,28 @@ def parse_workflow(workflow_path: Path) -> Workflow | None:
 
             # Validate min_fails >= 1
             if min_fails < 1:
-                print(
-                    f"Warning: fail_route in step '{step_data.get('id', '')}' "
-                    f"has min_fails ({min_fails}) < 1, skipping"
+                logger.warning(
+                    "fail_route in step '%s' has min_fails (%s) < 1, skipping",
+                    step_data.get("id", ""),
+                    min_fails,
                 )
                 continue
 
             # Validate min_fails <= max_fails
             if max_fails is not None and min_fails > max_fails:
-                print(
-                    f"Warning: fail_route in step '{step_data.get('id', '')}' "
-                    f"has min_fails ({min_fails}) > max_fails ({max_fails}), skipping"
+                logger.warning(
+                    "fail_route in step '%s' has min_fails (%s) > max_fails (%s), skipping",
+                    step_data.get("id", ""),
+                    min_fails,
+                    max_fails,
                 )
                 continue
 
             # Validate target is non-empty
             if not target:
-                print(
-                    f"Warning: fail_route in step '{step_data.get('id', '')}' "
-                    f"has empty target, skipping"
+                logger.warning(
+                    "fail_route in step '%s' has empty target, skipping",
+                    step_data.get("id", ""),
                 )
                 continue
 
