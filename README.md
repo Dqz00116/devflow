@@ -28,8 +28,10 @@ pip install -e .
 
 ## Quick Start
 
+> **If `.devflow/` already exists in the project, skip `init` and use it directly.**
+
 ```bash
-# Initialize project (creates .devflow/ with example workflows)
+# Only run init if .devflow/ does NOT already exist
 devflow init --language python --name "My Project"
 
 # List available workflows

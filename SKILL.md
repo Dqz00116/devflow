@@ -28,10 +28,12 @@ cd devflow
 pip install -e .
 ```
 
-### 2. Initialize Project
+### 2. Initialize Project (Skip if `.devflow/` already exists)
+
+> **Agent rule: If `.devflow/` already exists in the current project, do NOT run `init`. Use the existing workflows directly.**
 
 ```bash
-# Initialize a new project (creates .devflow/ with example workflows)
+# Only run this if .devflow/ is NOT present
 devflow init --language python --name "My Project"
 ```
 
