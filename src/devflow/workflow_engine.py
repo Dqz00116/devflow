@@ -16,10 +16,13 @@ if TYPE_CHECKING:
 class WorkflowEngine:
     """Orchestrates workflow progression."""
 
-    def __init__(self, workflow: Workflow, workflow_path: Path, state: StateStore):
+    def __init__(
+        self, workflow: Workflow, workflow_path: Path, state: StateStore, project_root: Path
+    ):
         self.workflow = workflow
         self.workflow_path = workflow_path
         self.state = state
+        self.project_root = project_root
         self.workflow_id = workflow.id
         # Stored results from last advance() for format_done_result()
         self._last_results: tuple[bool, list[tuple[bool, str]]] = (False, [])
@@ -71,7 +74,7 @@ class WorkflowEngine:
             state.current_step = None
         state.current_workflow = workflow_id
 
-        return cls(workflow, workflow_path, state)
+        return cls(workflow, workflow_path, state, project_root)
 
     @classmethod
     def from_project(cls, project_root: Path | None = None) -> WorkflowEngine | None:
@@ -129,8 +132,7 @@ class WorkflowEngine:
         from devflow.config import DevFlowConfig
 
         # Find config relative to project root (not cwd)
-        project_root = self.workflow_path.parent.parent.parent
-        config_path = project_root / ".devflow" / "config.toml"
+        config_path = self.project_root / ".devflow" / "config.toml"
         if not config_path.exists():
             # Fall back to find_config which searches from cwd
             config_path = DevFlowConfig.find_config()
@@ -152,23 +154,6 @@ class WorkflowEngine:
             if value and self.state.get(key) is None:
                 self.state.set(key, value)
 
-    def _increment_fail_count(self, step_id: str) -> int:
-        """Increment and return the failure count for a step.
-
-        Args:
-            step_id: The step ID to track failures for
-
-        Returns:
-            The new failure count after incrementing
-        """
-        key = f"{step_id}_fail_count"
-        count = self.state.get(key, 0)
-        if not isinstance(count, int):
-            count = 0
-        count += 1
-        self.state.set(key, count)
-        return count
-
     def _reset_fail_count(self, step_id: str) -> None:
         """Reset the failure count for a step by deleting it from state.
 
@@ -177,6 +162,14 @@ class WorkflowEngine:
         """
         key = f"{step_id}_fail_count"
         self.state.delete(key)
+
+    def _push_step_history(self, step_id: str) -> None:
+        """Push a step ID onto the step history stack."""
+        history = self.state.get("step_history", [])
+        if not isinstance(history, list):
+            history = []
+        history.append(step_id)
+        self.state.set("step_history", history)
 
     def _resolve_target(self, target: str) -> tuple[WorkflowEngine | None, str | None, str]:
         """Resolve a step target, potentially cross-workflow.
@@ -192,8 +185,7 @@ class WorkflowEngine:
         """
         if ":" in target:
             workflow_id, step_id = target.split(":", 1)
-            project_root = self.workflow_path.parent.parent.parent
-            target_engine = WorkflowEngine.from_workflow(workflow_id, project_root)
+            target_engine = WorkflowEngine.from_workflow(workflow_id, self.project_root)
             if target_engine is None:
                 return None, None, f"Target workflow not found: {workflow_id}"
             target_step = target_engine.workflow.get_step(step_id)
@@ -249,13 +241,11 @@ class WorkflowEngine:
             # No gates, always done
             return True, []
 
-        project_root = self.workflow_path.parent.parent.parent
-
         # Resolve variables in gates before checking
         self._inject_config_variables()
         resolved_gates = [resolve_variables(g, self.state) for g in current_step.gates]
 
-        return check_all_gates(resolved_gates, project_root, self.state)
+        return check_all_gates(resolved_gates, self.project_root, self.state)
 
     def advance(self) -> tuple[bool, Step | None, str]:
         """Advance to next step if current is done, or route on failure.
@@ -297,8 +287,10 @@ class WorkflowEngine:
             # Handle cross-workflow switch
             if target_engine is not self:
                 self._switch_to_workflow(target_engine)
+                self.state.set("step_history", [])
 
-            # Update state
+            # Update history and state
+            self._push_step_history(current_step.id)
             self.state.current_step = target_step.id
 
             return True, target_step, f"Advanced to: {target_step.name}"
@@ -335,8 +327,10 @@ class WorkflowEngine:
                     # Handle cross-workflow switch
                     if target_engine is not self:
                         self._switch_to_workflow(target_engine)
+                        self.state.set("step_history", [])
 
-                    # Update state
+                    # Update history and state
+                    self._push_step_history(current_step.id)
                     self.state.current_step = target_step.id
 
                     # Store routing info for format_done_result
@@ -353,7 +347,7 @@ class WorkflowEngine:
             return False, current_step, "Gates not satisfied:\n  - " + "\n  - ".join(failed)
 
     def go_back(self) -> tuple[bool, Step | None, str]:
-        """Go back to the previous step.
+        """Go back to the previous step using the step history stack.
 
         Returns:
             (success, previous_step, message)
@@ -362,17 +356,19 @@ class WorkflowEngine:
         if not current_step:
             return False, None, "No current step"
 
-        # Find the step that points to current
-        for step in self.workflow.steps:
-            if step.next_step == current_step.id:
-                self.state.current_step = step.id
-                return True, step, f"Returned to: {step.name}"
-
-        # Already at first step
-        if current_step.id == self.workflow.get_first_step().id:
+        history = self.state.get("step_history", [])
+        if not isinstance(history, list) or not history:
             return False, current_step, "Already at the first step"
 
-        return False, current_step, "Cannot determine previous step"
+        prev_step_id = history.pop()
+        self.state.set("step_history", history)
+
+        prev_step = self.workflow.get_step(prev_step_id)
+        if prev_step is None:
+            return False, current_step, "Already at the first step"
+
+        self.state.current_step = prev_step.id
+        return True, prev_step, f"Returned to: {prev_step.name}"
 
     def format_current_instruction(self) -> str:
         """Format current step instruction for display.

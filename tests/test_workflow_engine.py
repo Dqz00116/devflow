@@ -1,5 +1,6 @@
 """Tests for workflow_engine module — advance, fail routes, cross-workflow, format methods."""
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -8,6 +9,9 @@ import pytest
 
 from devflow.state_store import StateStore
 from devflow.workflow_engine import WorkflowEngine
+
+# Enable shell command execution for workflow engine tests
+os.environ["DEVFLOW_ALLOW_SHELL"] = "1"
 
 
 @pytest.fixture
