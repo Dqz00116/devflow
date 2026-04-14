@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -152,6 +153,10 @@ def check_command_success(command: str, project_root: Path) -> tuple[bool, str]:
     Returns:
         (is_passed, message)
     """
+    env_value = os.environ.get("DEVFLOW_ALLOW_SHELL", "").strip().lower()
+    if env_value not in ("1", "true", "yes"):
+        return False, "Shell command execution disabled. Set DEVFLOW_ALLOW_SHELL=1 to enable."
+
     try:
         result = subprocess.run(
             command,

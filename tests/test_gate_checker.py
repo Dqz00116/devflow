@@ -114,13 +114,21 @@ class TestCheckFileContains:
 class TestCheckCommandSuccess:
     """Test command_success gate."""
 
-    def test_successful_command(self) -> None:
+    def test_successful_command(self, monkeypatch) -> None:
+        monkeypatch.setenv("DEVFLOW_ALLOW_SHELL", "1")
         passed, msg = check_command_success("echo ok", Path.cwd())
         assert passed
 
-    def test_failing_command(self) -> None:
+    def test_failing_command(self, monkeypatch) -> None:
+        monkeypatch.setenv("DEVFLOW_ALLOW_SHELL", "1")
         passed, msg = check_command_success("exit 1", Path.cwd())
         assert not passed
+
+    def test_command_disabled_without_env_var(self, monkeypatch) -> None:
+        monkeypatch.delenv("DEVFLOW_ALLOW_SHELL", raising=False)
+        passed, msg = check_command_success("echo ok", Path.cwd())
+        assert not passed
+        assert "Shell command execution disabled" in msg
 
 
 class TestCheckUserApproved:
@@ -168,9 +176,10 @@ class TestCheckGate:
         )
         assert passed
 
-    def test_command_success_gate(self, state: StateStore) -> None:
+    def test_command_success_gate(self, state: StateStore, monkeypatch) -> None:
         # Variables are resolved before reaching check_gate in normal flow,
         # but test with already-resolved value
+        monkeypatch.setenv("DEVFLOW_ALLOW_SHELL", "1")
         state.set("test_command", "echo ok")
         resolved = resolve_variables("command_success:{test_command}", state)
         passed, msg = check_gate(resolved, Path.cwd(), state)
