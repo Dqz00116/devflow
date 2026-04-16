@@ -396,12 +396,16 @@ def validate(ctx: click.Context) -> None:
     if config.commands.test:
         console.print(f"[green]✓[/green] Test command: {config.commands.test}")
     else:
-        console.print("[yellow]✗[/yellow] Test command not configured (set in .devflow/config.toml)")
+        console.print(
+            "[yellow]✗[/yellow] Test command not configured (set in .devflow/config.toml)"
+        )
 
     if all_valid:
         console.print("\n[green]All validations passed![/green]")
     else:
-        console.print("\n[yellow]Some issues found. Run 'devflow init' to create missing files.[/yellow]")
+        console.print(
+            "\n[yellow]Some issues found. Run 'devflow init' to create missing files.[/yellow]"
+        )
 
 
 # ============================================================================
@@ -553,6 +557,72 @@ def back() -> None:
         console.print(engine.format_current_instruction(), markup=False)
     else:
         console.print(f"[yellow]{message}[/yellow]")
+
+
+# ============================================================================
+# Ralph Loop Commands
+# ============================================================================
+
+@cli.command()
+@click.option("--tool", default="local", help="Agent tool to use (local)")
+@click.option("--max-iterations", default=10, help="Maximum loop iterations")
+@click.pass_context
+def run(ctx: click.Context, tool: str, max_iterations: int) -> None:
+    """Start the autonomous loop."""
+    from devflow.loop_engine import LoopEngine
+
+    project_root = Path.cwd()
+    loop = LoopEngine(project_root, tool=tool)
+    result = loop.run(max_iterations=max_iterations)
+
+    if result.status == "complete":
+        console.print("[green]Workflow complete![/green]")
+    elif result.status == "blocked":
+        console.print(f"[yellow]Blocked at step: {result.step or 'unknown'}[/yellow]")
+        console.print(f"[yellow]{result.message}[/yellow]")
+    elif result.status == "max_iterations_reached":
+        console.print(f"[yellow]Max iterations reached ({max_iterations})[/yellow]")
+        console.print(f"[yellow]Last step: {result.step or 'unknown'}[/yellow]")
+
+
+@cli.command("loop-status")
+def loop_status() -> None:
+    """Show loop status and remaining tasks."""
+    from devflow.loop_engine import LoopEngine
+
+    project_root = Path.cwd()
+    loop = LoopEngine(project_root)
+    console.print(loop.status(), markup=False)
+
+
+@cli.command("sync-backlog")
+@click.pass_context
+def sync_backlog(ctx: click.Context) -> None:
+    """Generate backlog from the current workflow."""
+    from devflow.backlog import Backlog
+
+    engine = ensure_workflow()
+    if not engine:
+        return
+
+    project_root = Path.cwd()
+    backlog = Backlog.generate_from_workflow(engine.workflow)
+    backlog_path = project_root / ".devflow" / "backlog.json"
+    backlog.save(backlog_path)
+    console.print(f"[green]Backlog synced: {backlog_path}[/green]")
+    console.print(f"[green]Tasks: {len(backlog.tasks)}[/green]")
+
+
+@cli.command("loop-reset")
+def loop_reset() -> None:
+    """Reset loop progress (keeps progress.md as history)."""
+    from devflow.loop_engine import LoopEngine
+
+    project_root = Path.cwd()
+    loop = LoopEngine(project_root)
+    loop.reset()
+    console.print("[green]Loop progress reset.[/green]")
+    console.print("[yellow]Note: progress.md history is preserved.[/yellow]")
 
 
 def main() -> None:

@@ -6,7 +6,7 @@ version = "0.1.0"
 
 [commands]
 build = "python -m build"
-test = "pytest"
+test = "python -m pytest"
 lint = "ruff check ."
 test_unit = "pytest tests/unit -v"
 test_integration = "pytest tests/integration -v"
