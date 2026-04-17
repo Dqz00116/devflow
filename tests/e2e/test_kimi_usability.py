@@ -2,10 +2,12 @@
 
 This test:
 1. Detects a locally installed Kimi CLI (kimi / kimi-cli / kimi-code)
-2. Sets up a temporary TaskFlow project with a custom E2E workflow
-3. Sends a comprehensive prompt to Kimi asking it to follow DevFlow
-4. Waits for completion (up to 10 minutes)
-5. Asserts that all expected files exist, tests pass, and workflow is complete
+2. Sets up a persistent TaskFlow project under tests/e2e/taskflow_e2e/
+3. Cleans up any previous test artifacts before starting
+4. Sends a comprehensive prompt to Kimi asking it to follow DevFlow
+5. Waits for completion (up to 10 minutes)
+6. Asserts that all expected files exist, tests pass, and workflow is complete
+7. Preserves the project directory for manual inspection
 
 Requirements:
 - Kimi CLI must be installed and available in PATH
@@ -24,6 +26,9 @@ import pytest
 
 KIMI_CANDIDATES = ["kimi", "kimi-cli", "kimi-code"]
 REPO_SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
+
+# Persistent project directory for inspection after test runs
+E2E_PROJECT_DIR = Path(__file__).resolve().parent / "taskflow_e2e"
 
 
 def _which_kimi() -> str | None:
@@ -218,15 +223,27 @@ def _run_kimi(executable: str, project_dir: Path, prompt: str) -> subprocess.Com
     )
 
 
-def _setup_project(project_dir: Path) -> str:
-    """Initialize DevFlow project, custom workflow, tests, and requirements."""
+def _cleanup_previous_project() -> None:
+    """Remove previous e2e project directory if it exists."""
+    if E2E_PROJECT_DIR.exists():
+        shutil.rmtree(E2E_PROJECT_DIR, ignore_errors=True)
+
+
+def _setup_project() -> str:
+    """Initialize DevFlow project, custom workflow, tests, and requirements.
+
+    Returns the workflow_run_id if available.
+    """
+    _cleanup_previous_project()
+    E2E_PROJECT_DIR.mkdir(parents=True, exist_ok=True)
+
     env = os.environ.copy()
     env["PYTHONPATH"] = REPO_SRC_DIR
 
     # 1. Init project
     result = subprocess.run(
         [sys.executable, "-m", "devflow", "init", "--language", "python", "--name", "TaskFlow"],
-        cwd=str(project_dir),
+        cwd=str(E2E_PROJECT_DIR),
         capture_output=True,
         text=True,
         env=env,
@@ -234,7 +251,7 @@ def _setup_project(project_dir: Path) -> str:
     assert result.returncode == 0, f"devflow init failed: {result.stderr}"
 
     # 2. Create custom E2E workflow
-    workflows_dir = project_dir / ".devflow" / "workflows"
+    workflows_dir = E2E_PROJECT_DIR / ".devflow" / "workflows"
     (workflows_dir / "E2E-MODE-A.toml").write_text(
         '[workflow]\n'
         'id = "E2E-MODE-A"\n'
@@ -253,13 +270,13 @@ def _setup_project(project_dir: Path) -> str:
     )
 
     # 3. Create requirements.txt
-    (project_dir / "requirements.txt").write_text(
+    (E2E_PROJECT_DIR / "requirements.txt").write_text(
         "fastapi\nuvicorn\npytest\nhttpx\n",
         encoding="utf-8",
     )
 
     # 4. Create preset test file (trap test included)
-    tests_dir = project_dir / "tests"
+    tests_dir = E2E_PROJECT_DIR / "tests"
     tests_dir.mkdir(exist_ok=True)
     (tests_dir / "test_app.py").write_text(
         'import pytest\n'
@@ -295,13 +312,13 @@ def _setup_project(project_dir: Path) -> str:
     )
 
     # 5. Ensure config test command points to our test file
-    config_path = project_dir / ".devflow" / "config.toml"
+    config_path = E2E_PROJECT_DIR / ".devflow" / "config.toml"
     config_text = config_path.read_text(encoding="utf-8")
     config_text = config_text.replace('test = "pytest"', 'test = "pytest tests/test_app.py -v"')
     config_path.write_text(config_text, encoding="utf-8")
 
     # Read run_id from state after init (it may or may not exist yet)
-    state_path = project_dir / ".devflow" / "state.toml"
+    state_path = E2E_PROJECT_DIR / ".devflow" / "state.toml"
     if state_path.exists():
         import toml
         state_data = toml.load(state_path)
@@ -309,11 +326,11 @@ def _setup_project(project_dir: Path) -> str:
     return ""
 
 
-def _build_prompt(project_dir: Path, run_id: str) -> str:
+def _build_prompt(run_id: str) -> str:
     """Build the comprehensive prompt for Kimi."""
     return f"""You are an AI software engineer. Complete a full-stack project by strictly following the DevFlow v2.0 CLI workflow.
 
-WORK DIRECTORY: {project_dir}
+WORK DIRECTORY: {E2E_PROJECT_DIR}
 
 CRITICAL RULES:
 1. ALWAYS run `devflow current` first to know what to do
@@ -364,18 +381,19 @@ STEP-BY-STEP GUIDE:
 5. For `finish`, update the REQ file to include `status: done` and create the COMPLETION file.
 
 IMPORTANT: Start by running `devflow select-workflow E2E-MODE-A` and then `devflow current`.
-Do everything inside {project_dir}.
+Do everything inside {E2E_PROJECT_DIR}.
 """
 
 
 @pytest.mark.slow
-def test_kimi_completes_taskflow_with_devflow(kimi_executable: str, tmp_path: Path) -> None:
-    """End-to-end test: Kimi CLI should complete the full DevFlow workflow."""
-    project_dir = tmp_path / "taskflow_e2e"
-    project_dir.mkdir()
+def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
+    """End-to-end test: Kimi CLI should complete the full DevFlow workflow.
 
-    run_id = _setup_project(project_dir)
-    initial_prompt = _build_prompt(project_dir, run_id or "<run_id>")
+    The project directory is persisted at tests/e2e/taskflow_e2e/ for manual inspection.
+    Any previous run is cleaned up before starting.
+    """
+    run_id = _setup_project()
+    initial_prompt = _build_prompt(run_id or "<run_id>")
 
     continuation_prompt = (
         "Continue the DevFlow workflow from the current step.\n"
@@ -387,13 +405,13 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str, tmp_path: Pa
         "Repeat until you see 'Workflow complete!'. Do not stop early."
     )
 
-    log_path = project_dir / "kimi_e2e.log"
+    log_path = E2E_PROJECT_DIR / "kimi_e2e.log"
     all_outputs: list[str] = []
 
     max_turns = 5
     for turn in range(max_turns):
         prompt = initial_prompt if turn == 0 else continuation_prompt
-        result = _run_kimi(kimi_executable, project_dir, prompt)
+        result = _run_kimi(kimi_executable, E2E_PROJECT_DIR, prompt)
 
         turn_header = f"\n=== TURN {turn + 1} ===\n"
         turn_output = turn_header + result.stdout + "\n=== STDERR ===\n" + result.stderr
@@ -403,7 +421,7 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str, tmp_path: Pa
         print(turn_output)
         print(f"\n=== TURN {turn + 1} RETURN CODE: {result.returncode} ===\n")
 
-        state_path = project_dir / ".devflow" / "state.toml"
+        state_path = E2E_PROJECT_DIR / ".devflow" / "state.toml"
         if not state_path.exists():
             if turn == max_turns - 1:
                 pytest.fail("DevFlow state file was never created after max turns")
@@ -416,8 +434,8 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str, tmp_path: Pa
         # If we've reached finish, try one more turn to actually complete it
         if current_step == "finish":
             # One extra turn to run `devflow done` on finish and get "Workflow complete!"
-            result = _run_kimi(kimi_executable, project_dir, continuation_prompt)
-            turn_header = f"\n=== FINAL TURN ===\n"
+            result = _run_kimi(kimi_executable, E2E_PROJECT_DIR, continuation_prompt)
+            turn_header = "\n=== FINAL TURN ===\n"
             turn_output = turn_header + result.stdout + "\n=== STDERR ===\n" + result.stderr
             all_outputs.append(turn_output)
             log_path.write_text("\n".join(all_outputs), encoding="utf-8")
@@ -438,19 +456,19 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str, tmp_path: Pa
     assert run_id_actual, "workflow_run_id missing from state"
 
     required_files = [
-        project_dir / "docs" / "requirements" / f"REQ-{run_id_actual}.md",
-        project_dir / "docs" / "features" / f"FEAT-{run_id_actual}.md",
-        project_dir / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id_actual}.md",
-        project_dir / "docs" / "superpowers" / "plans" / f"PLAN-{run_id_actual}.md",
-        project_dir / "docs" / "evidence" / f"EVIDENCE-{run_id_actual}.md",
-        project_dir / "docs" / "completion" / f"COMPLETION-{run_id_actual}.md",
-        project_dir / "src" / "main.py",
-        project_dir / "index.html",
+        E2E_PROJECT_DIR / "docs" / "requirements" / f"REQ-{run_id_actual}.md",
+        E2E_PROJECT_DIR / "docs" / "features" / f"FEAT-{run_id_actual}.md",
+        E2E_PROJECT_DIR / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id_actual}.md",
+        E2E_PROJECT_DIR / "docs" / "superpowers" / "plans" / f"PLAN-{run_id_actual}.md",
+        E2E_PROJECT_DIR / "docs" / "evidence" / f"EVIDENCE-{run_id_actual}.md",
+        E2E_PROJECT_DIR / "docs" / "completion" / f"COMPLETION-{run_id_actual}.md",
+        E2E_PROJECT_DIR / "src" / "main.py",
+        E2E_PROJECT_DIR / "index.html",
     ]
     for f in required_files:
-        assert f.exists(), f"Missing expected artifact: {f.relative_to(project_dir)}"
+        assert f.exists(), f"Missing expected artifact: {f.relative_to(E2E_PROJECT_DIR)}"
 
-    req_content = (project_dir / "docs" / "requirements" / f"REQ-{run_id_actual}.md").read_text()
+    req_content = (E2E_PROJECT_DIR / "docs" / "requirements" / f"REQ-{run_id_actual}.md").read_text()
     # Note: agent may overwrite the REQ file during finish; we only strictly
     # require the final gate condition (status: done) to be satisfied.
     assert "status: done" in req_content, "REQ file missing 'status: done'"
@@ -459,7 +477,7 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str, tmp_path: Pa
     test_env["PYTHONPATH"] = REPO_SRC_DIR
     test_result = subprocess.run(
         [sys.executable, "-m", "pytest", "tests/test_app.py", "-v"],
-        cwd=str(project_dir),
+        cwd=str(E2E_PROJECT_DIR),
         capture_output=True,
         text=True,
         env=test_env,
