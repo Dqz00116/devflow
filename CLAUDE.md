@@ -35,6 +35,14 @@ DevFlow v2.0 is a Python CLI tool for AI-assisted software development using TOM
 
 - **`src/devflow/config.py`** — Loads `.devflow/config.toml` and provides typed access to `project`, `commands`, `paths`, `constraints`, and `workflow` settings. Includes language presets for Python, JS/TS, Go, Rust, and .NET.
 
+### Ralph Loop Modules
+
+- **`src/devflow/loop_engine.py`** — `LoopEngine` drives the workflow autonomously. It reads `.devflow/backlog.json`, maps tasks to workflow steps, spawns an agent runner, auto-validates via `engine.advance()`, and creates VCS checkpoints on success. Supports `max_iterations`, pause on block, and progress logging.
+- **`src/devflow/vcs.py`** — VCS abstraction layer (`VCSDriver` base class with `GitDriver`, `SVNDriver`, `NoVCSDriver`). Auto-detects Git/SVN/no-VCS. Provides `checkpoint()`, `get_last_checkpoint_id()`, `has_uncommitted_changes()`, and `get_diff_summary()`. Configurable via `project.vcs` in `config.toml`.
+- **`src/devflow/backlog.py`** — Read/write `.devflow/backlog.json`. Tracks tasks with `id`, `workflow_id`, `step_id`, `passes`, `checkpoint_id`, and `metadata`. Can auto-generate from a workflow TOML via `Backlog.generate_from_workflow()`.
+- **`src/devflow/progress.py`** — Append-only `ProgressLogger` for `.devflow/progress.md`. Each entry includes timestamp, step ID, patterns learned, gotchas, and checkpoint reference. Summaries are injected into agent prompts for cross-iteration memory.
+- **`src/devflow/agent_runner.py`** — In-process agent wrapper for `--tool local`. Executes a prompt against the current workflow step and returns results. Used when no external CLI is available.
+
 ### Key Behavioral Patterns
 
 - **Workflow files** live in `.devflow/workflows/*.toml`. Bundled defaults (MODE-A.toml, MODE-B.toml) and prompt files are copied from `src/devflow/data/` during `devflow init`.

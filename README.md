@@ -17,6 +17,8 @@ DevFlow v2.0 is a development workflow tool designed for AI-assisted software de
 - **Prompt Reuse** - File references for complex prompts
 - **Config Variables** - Reference `{test_command}`, `{lint_command}` etc. from config
 - **Universal Design** - Works with any programming language
+- **Ralph Loop** - Autonomous execution: `devflow run` drives the workflow automatically
+- **VCS Abstraction** - Git/SVN/no-VCS checkpointing via unified driver interface
 
 ## Installation
 
@@ -62,6 +64,12 @@ devflow back                        # Go back to previous step
 devflow workflow-status             # Show workflow status
 devflow approve ITEM                # Mark item as user-approved
 devflow set KEY VALUE               # Set a state variable
+
+# Ralph Loop — Autonomous Execution
+devflow run [--tool local] [--max-iterations 10]   # Start autonomous loop
+devflow loop-status                                  # Show loop status and remaining tasks
+devflow sync-backlog                                 # Generate backlog from current workflow
+devflow loop-reset                                   # Reset loop progress (preserves history)
 ```
 
 ## Workflow Structure

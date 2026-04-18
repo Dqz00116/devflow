@@ -17,6 +17,7 @@ DevFlow is a universal AI-assisted development workflow system using TOML-based 
 - **Workflow Inheritance** - Extend and customize existing workflows
 - **Config Variables** - Reference `{test_command}`, `{lint_command}` etc. from config
 - **CLI Tool** - Manage workflow state and progression
+- **Ralph Loop** - Autonomous execution via `devflow run`
 
 ## Quick Start
 
@@ -189,6 +190,12 @@ devflow back                        # Go back to previous step
 devflow workflow-status             # Show workflow status
 devflow approve <item>              # Mark item as user-approved
 devflow set <key> <value>           # Set a state variable
+
+# Ralph Loop — Autonomous Execution
+devflow run [--tool local] [--max-iterations 10]   # Start autonomous loop
+devflow loop-status                                  # Show loop status and remaining tasks
+devflow sync-backlog                                 # Generate backlog from current workflow
+devflow loop-reset                                   # Reset loop progress (preserves history)
 ```
 
 ### Legacy Commands (Not for AI agents)
