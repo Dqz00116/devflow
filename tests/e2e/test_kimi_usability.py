@@ -7,7 +7,7 @@ This test:
 4. Sends a comprehensive prompt to Kimi asking it to follow DevFlow
 5. Waits for completion (up to 10 minutes)
 6. Asserts that all expected files exist, tests pass, and workflow is complete
-7. Preserves the project directory for manual inspection
+7. Generates a Markdown comparison report at tests/e2e/reports/
 
 Requirements:
 - Kimi CLI must be installed and available in PATH
@@ -16,10 +16,13 @@ Requirements:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -29,6 +32,7 @@ REPO_SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
 
 # Persistent project directory for inspection after test runs
 E2E_PROJECT_DIR = Path(__file__).resolve().parent / "taskflow_e2e"
+E2E_REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 
 def _which_kimi() -> str | None:
@@ -56,7 +60,9 @@ def _is_likely_ai_cli(executable: str) -> bool:
         return False
 
 
-def _discover_kimi_invocation(executable: str) -> tuple[list[str], dict[str, str]] | None:
+def _discover_kimi_invocation(  # noqa: C901
+    executable: str,
+) -> tuple[list[str], dict[str, str]] | None:
     """Discover how to invoke Kimi in non-interactive mode.
 
     Kimi CLI supports `--print` (non-interactive) with `--input-format text` via stdin.
@@ -65,7 +71,15 @@ def _discover_kimi_invocation(executable: str) -> tuple[list[str], dict[str, str
     # Strategy 1: Kimi Code CLI print mode (preferred)
     try:
         result = subprocess.run(
-            [executable, "--print", "--yolo", "--input-format", "text", "--max-steps-per-turn", "100"],
+            [
+                executable,
+                "--print",
+                "--yolo",
+                "--input-format",
+                "text",
+                "--max-steps-per-turn",
+                "100",
+            ],
             input="hello\n",
             capture_output=True,
             text=True,
@@ -86,7 +100,17 @@ def _discover_kimi_invocation(executable: str) -> tuple[list[str], dict[str, str
                 ]
             )
         ):
-            return (["--print", "--yolo", "--input-format", "text", "--max-steps-per-turn", "100"], {})
+            return (
+                [
+                    "--print",
+                    "--yolo",
+                    "--input-format",
+                    "text",
+                    "--max-steps-per-turn",
+                    "100",
+                ],
+                {},
+            )
     except Exception:
         pass
 
@@ -98,7 +122,10 @@ def _discover_kimi_invocation(executable: str) -> tuple[list[str], dict[str, str
             text=True,
             timeout=15,
         )
-        if "unknown" not in result.stderr.lower() and "unrecognized" not in result.stderr.lower():
+        if (
+            "unknown" not in result.stderr.lower()
+            and "unrecognized" not in result.stderr.lower()
+        ):
             return (["-c"], {})
     except Exception:
         pass
@@ -111,7 +138,10 @@ def _discover_kimi_invocation(executable: str) -> tuple[list[str], dict[str, str
             text=True,
             timeout=15,
         )
-        if "unknown" not in result.stderr.lower() and "unrecognized" not in result.stderr.lower():
+        if (
+            "unknown" not in result.stderr.lower()
+            and "unrecognized" not in result.stderr.lower()
+        ):
             return (["chat", "-c"], {})
     except Exception:
         pass
@@ -163,7 +193,8 @@ def kimi_executable() -> str:
     if path is None:
         pytest.skip(
             "Kimi CLI not found in PATH. "
-            "Please install it (e.g. from https://www.moonshot.cn/ or via your package manager) "
+            "Please install it (e.g. from https://www.moonshot.cn/ "
+            "or via your package manager) "
             f"and ensure one of these commands is available: {', '.join(KIMI_CANDIDATES)}"
         )
 
@@ -176,8 +207,10 @@ def kimi_executable() -> str:
     invocation = _discover_kimi_invocation(path)
     if invocation is None:
         pytest.skip(
-            f"Kimi CLI found at '{path}' but its non-interactive invocation mode could not be determined. "
-            "Supported modes: -c <prompt>, chat -c <prompt>, run <prompt>, or stdin pipe. "
+            f"Kimi CLI found at '{path}' but its non-interactive invocation mode "
+            "could not be determined. "
+            "Supported modes: -c <prompt>, chat -c <prompt>, "
+            "run <prompt>, or stdin pipe. "
             "Try running it manually to find the right flag."
         )
 
@@ -186,7 +219,9 @@ def kimi_executable() -> str:
     return path
 
 
-def _run_kimi(executable: str, project_dir: Path, prompt: str) -> subprocess.CompletedProcess[str]:
+def _run_kimi(
+    executable: str, project_dir: Path, prompt: str
+) -> subprocess.CompletedProcess[str]:
     """Run Kimi CLI with the given prompt."""
     invocation = getattr(kimi_executable, "_invocation", ([], {}))
     args_prefix, extra_env = invocation
@@ -242,7 +277,16 @@ def _setup_project() -> str:
 
     # 1. Init project
     result = subprocess.run(
-        [sys.executable, "-m", "devflow", "init", "--language", "python", "--name", "TaskFlow"],
+        [
+            sys.executable,
+            "-m",
+            "devflow",
+            "init",
+            "--language",
+            "python",
+            "--name",
+            "TaskFlow",
+        ],
         cwd=str(E2E_PROJECT_DIR),
         capture_output=True,
         text=True,
@@ -253,7 +297,7 @@ def _setup_project() -> str:
     # 2. Create custom E2E workflow
     workflows_dir = E2E_PROJECT_DIR / ".devflow" / "workflows"
     (workflows_dir / "E2E-MODE-A.toml").write_text(
-        '[workflow]\n'
+        "[workflow]\n"
         'id = "E2E-MODE-A"\n'
         'name = "E2E Feature Development"\n'
         'extends = ["MODE-A"]\n\n'
@@ -263,8 +307,8 @@ def _setup_project() -> str:
         'prompt_file = "prompts/implement-tdd.md"\n'
         'gates = ["command_success:{test_command}"]\n'
         'next = "code-review"\n'
-        '[[steps.fail_route]]\n'
-        'min_fails = 2\n'
+        "[[steps.fail_route]]\n"
+        "min_fails = 2\n"
         'target = "MODE-B:debug-root-cause"\n',
         encoding="utf-8",
     )
@@ -279,48 +323,51 @@ def _setup_project() -> str:
     tests_dir = E2E_PROJECT_DIR / "tests"
     tests_dir.mkdir(exist_ok=True)
     (tests_dir / "test_app.py").write_text(
-        'import pytest\n'
-        'from fastapi.testclient import TestClient\n'
-        'from src.main import app\n\n'
-        'client = TestClient(app)\n\n'
+        "import pytest\n"
+        "from fastapi.testclient import TestClient\n"
+        "from src.main import app\n\n"
+        "client = TestClient(app)\n\n"
         'def test_get_tasks_empty():\n'
         '    response = client.get("/tasks")\n'
-        '    assert response.status_code == 200\n'
+        "    assert response.status_code == 200\n"
         '    assert response.json() == []\n\n'
         'def test_create_task():\n'
         '    response = client.post("/tasks", json={"title": "Buy milk"})\n'
-        '    assert response.status_code == 201\n'
-        '    data = response.json()\n'
+        "    assert response.status_code == 201\n"
+        "    data = response.json()\n"
         '    assert data["title"] == "Buy milk"\n'
         '    assert data["completed"] is False\n'
         '    assert "id" in data\n\n'
         'def test_create_task_empty_title_rejects():\n'
         '    response = client.post("/tasks", json={"title": ""})\n'
-        '    assert response.status_code == 422\n\n'
+        "    assert response.status_code == 422\n\n"
         'def test_toggle_task():\n'
         '    create = client.post("/tasks", json={"title": "Test"})\n'
-        '    task = create.json()\n'
+        "    task = create.json()\n"
         '    response = client.patch(f"/tasks/{task[\'id\']}")\n'
-        '    assert response.status_code == 200\n'
+        "    assert response.status_code == 200\n"
         '    assert response.json()["completed"] is True\n\n'
         'def test_delete_task():\n'
         '    create = client.post("/tasks", json={"title": "Delete me"})\n'
-        '    task = create.json()\n'
+        "    task = create.json()\n"
         '    response = client.delete(f"/tasks/{task[\'id\']}")\n'
-        '    assert response.status_code == 204\n',
+        "    assert response.status_code == 204\n",
         encoding="utf-8",
     )
 
     # 5. Ensure config test command points to our test file
     config_path = E2E_PROJECT_DIR / ".devflow" / "config.toml"
     config_text = config_path.read_text(encoding="utf-8")
-    config_text = config_text.replace('test = "pytest"', 'test = "pytest tests/test_app.py -v"')
+    config_text = config_text.replace(
+        'test = "pytest"', 'test = "pytest tests/test_app.py -v"'
+    )
     config_path.write_text(config_text, encoding="utf-8")
 
     # Read run_id from state after init (it may or may not exist yet)
     state_path = E2E_PROJECT_DIR / ".devflow" / "state.toml"
     if state_path.exists():
         import toml
+
         state_data = toml.load(state_path)
         return str(state_data.get("workflow_run_id", ""))
     return ""
@@ -328,61 +375,258 @@ def _setup_project() -> str:
 
 def _build_prompt(run_id: str) -> str:
     """Build the comprehensive prompt for Kimi."""
-    return f"""You are an AI software engineer. Complete a full-stack project by strictly following the DevFlow v2.0 CLI workflow.
+    return (
+        "You are an AI software engineer. Complete a full-stack project "
+        "by strictly following the DevFlow v2.0 CLI workflow.\n\n"
+        f"WORK DIRECTORY: {E2E_PROJECT_DIR}\n\n"
+        "CRITICAL RULES:\n"
+        "1. ALWAYS run `devflow current` first to know what to do\n"
+        "2. ONLY do what the current step says\n"
+        "3. After finishing the step, run `devflow done`\n"
+        "4. If `devflow done` fails, read the error, fix it, "
+        "and run `devflow done` again\n"
+        "5. If a step requires `user_approved`, "
+        "run `devflow approve <ITEM>` yourself and continue\n"
+        "6. NEVER skip steps and NEVER create files "
+        "for future steps ahead of time\n"
+        '7. Do not stop until you see "Workflow complete!"\n\n'
+        "PROJECT: TaskFlow\n"
+        "- Backend: Python FastAPI in `src/main.py`\n"
+        "- Frontend: `index.html` with inline JavaScript (no build tools)\n"
+        "- Storage: in-memory Python list or dict (no SQLite/Postgres)\n"
+        "- Tests: `tests/test_app.py` already exists. You must make them pass.\n\n"
+        "API Requirements for `src/main.py`:\n"
+        "- `GET /tasks` → return list of tasks, newest first\n"
+        '- `POST /tasks` → accepts `{"title": string}`, returns 201; '
+        "if title is empty string, return 422\n"
+        "- `PATCH /tasks/{id}` → toggle `completed` boolean, "
+        "return updated task\n"
+        "- `DELETE /tasks/{id}` → delete task, return 204\n\n"
+        "Frontend Requirements for `index.html`:\n"
+        "- Input box + Add button\n"
+        "- Display list of tasks with toggle (complete/uncomplete) "
+        "and delete buttons\n"
+        "- Must call the backend API endpoints above\n\n"
+        "WORKFLOW HINT (E2E-MODE-A gates):\n"
+        f"- req-create: needs `docs/requirements/REQ-{run_id}.md`\n"
+        "- req-approve: needs REQ file containing `status: approved` + "
+        f"`docs/features/FEAT-{run_id}.md`\n"
+        f"- brainstorm: needs `docs/superpowers/specs/DESIGN-{run_id}.md`\n"
+        f"- write-plan: needs `docs/superpowers/plans/PLAN-{run_id}.md`\n"
+        "- implement-tdd: `pytest tests/test_app.py -v` must pass\n"
+        f"- code-review: run `devflow approve CODE-REVIEW-{run_id}` then done\n"
+        "- test-run: tests must pass\n"
+        f"- verify: needs `docs/evidence/EVIDENCE-{run_id}.md`\n"
+        "- finish: needs `docs/completion/COMPLETION-{run_id}.md` + "
+        "REQ file containing `status: done`\n\n"
+        "STEP-BY-STEP GUIDE:\n"
+        "1. Run `devflow select-workflow E2E-MODE-A`\n"
+        "2. Loop:\n"
+        "   a. `devflow current`\n"
+        "   b. Do the step\n"
+        "   c. `devflow done`\n"
+        "   d. Fix any gate failures and repeat c\n"
+        "3. When you reach `implement-tdd`, write the FastAPI app "
+        "and frontend, then run tests until they pass.\n"
+        f"4. For `code-review`, self-approve with "
+        f"`devflow approve CODE-REVIEW-{run_id}`.\n"
+        "5. For `finish`, update the REQ file to include "
+        "`status: done` and create the COMPLETION file.\n\n"
+        "IMPORTANT: Start by running `devflow select-workflow E2E-MODE-A` "
+        "and then `devflow current`.\n"
+        f"Do everything inside {E2E_PROJECT_DIR}.\n"
+    )
 
-WORK DIRECTORY: {E2E_PROJECT_DIR}
 
-CRITICAL RULES:
-1. ALWAYS run `devflow current` first to know what to do
-2. ONLY do what the current step says
-3. After finishing the step, run `devflow done`
-4. If `devflow done` fails, read the error, fix it, and run `devflow done` again
-5. If a step requires `user_approved`, run `devflow approve <ITEM>` yourself and continue
-6. NEVER skip steps and NEVER create files for future steps ahead of time
-7. Do not stop until you see "Workflow complete!"
+def _collect_run_metrics(
+    start_time: float,
+    end_time: float,
+    turn_count: int,
+    run_id: str,
+    state: dict,
+    test_result: subprocess.CompletedProcess[str],
+) -> dict:
+    """Collect metrics from the completed run for the report."""
+    metrics = {
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "duration_seconds": round(end_time - start_time, 2),
+        "turn_count": turn_count,
+        "final_step": state.get("current_step", "unknown"),
+        "workflow_run_id": run_id,
+        "status": "PASS",
+        "tests_passed": test_result.returncode == 0,
+        "test_stdout": test_result.stdout if test_result.returncode == 0 else "",
+        "test_stderr": test_result.stderr if test_result.returncode != 0 else "",
+    }
+    return metrics
 
-PROJECT: TaskFlow
-- Backend: Python FastAPI in `src/main.py`
-- Frontend: `index.html` with inline JavaScript (no build tools)
-- Storage: in-memory Python list or dict (no SQLite/Postgres)
-- Tests: `tests/test_app.py` already exists. You must make them pass.
 
-API Requirements for `src/main.py`:
-- `GET /tasks` → return list of tasks, newest first
-- `POST /tasks` → accepts `{{"title": string}}`, returns 201; if title is empty string, return 422
-- `PATCH /tasks/{{id}}` → toggle `completed` boolean, return updated task
-- `DELETE /tasks/{{id}}` → delete task, return 204
+def _list_artifacts(project_dir: Path) -> list[dict]:
+    """List all generated artifacts with sizes."""
+    artifacts = []
+    for pattern in [
+        "docs/**/*.md",
+        "src/*.py",
+        "index.html",
+        "tests/*.py",
+        "kimi_e2e.log",
+    ]:
+        for fp in project_dir.glob(pattern):
+            if fp.is_file():
+                rel = fp.relative_to(project_dir).as_posix()
+                size = fp.stat().st_size
+                artifacts.append(
+                    {
+                        "path": rel,
+                        "size_bytes": size,
+                        "size_human": _human_readable_size(size),
+                    }
+                )
+    return sorted(artifacts, key=lambda x: x["path"])
 
-Frontend Requirements for `index.html`:
-- Input box + Add button
-- Display list of tasks with toggle (complete/uncomplete) and delete buttons
-- Must call the backend API endpoints above
 
-WORKFLOW HINT (E2E-MODE-A gates):
-- req-create: needs `docs/requirements/REQ-{run_id}.md`
-- req-approve: needs REQ file containing `status: approved` + `docs/features/FEAT-{run_id}.md`
-- brainstorm: needs `docs/superpowers/specs/DESIGN-{run_id}.md`
-- write-plan: needs `docs/superpowers/plans/PLAN-{run_id}.md`
-- implement-tdd: `pytest tests/test_app.py -v` must pass
-- code-review: run `devflow approve CODE-REVIEW-{run_id}` then done
-- test-run: tests must pass
-- verify: needs `docs/evidence/EVIDENCE-{run_id}.md`
-- finish: needs `docs/completion/COMPLETION-{run_id}.md` + REQ file containing `status: done`
+def _human_readable_size(size_bytes: int) -> str:
+    """Convert bytes to human readable string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
 
-STEP-BY-STEP GUIDE:
-1. Run `devflow select-workflow E2E-MODE-A`
-2. Loop:
-   a. `devflow current`
-   b. Do the step
-   c. `devflow done`
-   d. Fix any gate failures and repeat c
-3. When you reach `implement-tdd`, write the FastAPI app and frontend, then run tests until they pass.
-4. For `code-review`, self-approve with `devflow approve CODE-REVIEW-{run_id}`.
-5. For `finish`, update the REQ file to include `status: done` and create the COMPLETION file.
 
-IMPORTANT: Start by running `devflow select-workflow E2E-MODE-A` and then `devflow current`.
-Do everything inside {E2E_PROJECT_DIR}.
-"""
+def _load_previous_reports() -> list[dict]:
+    """Load all previous report JSON metadata files."""
+    reports = []
+    if not E2E_REPORTS_DIR.exists():
+        return reports
+    for json_file in sorted(E2E_REPORTS_DIR.glob("report_*.json")):
+        try:
+            data = json.loads(json_file.read_text(encoding="utf-8"))
+            reports.append(data)
+        except Exception:
+            pass
+    return reports
+
+
+def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
+    """Generate a Markdown comparison report and save it.
+
+    Returns the path to the generated report.
+    """
+    E2E_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    timestamp = metrics["timestamp"].replace(":", "-")
+    report_path = E2E_REPORTS_DIR / f"report_{timestamp}.md"
+    json_path = E2E_REPORTS_DIR / f"report_{timestamp}.json"
+
+    # Save raw metrics for future comparisons
+    json_path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    previous_reports = _load_previous_reports()
+    prev = previous_reports[-1] if previous_reports else None
+
+    lines = [
+        f"# E2E Test Report — {metrics['timestamp']}",
+        "",
+        "## Run Summary",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| Timestamp | {metrics['timestamp']} |",
+        f"| Duration | {metrics['duration_seconds']}s |",
+        f"| Total Turns | {metrics['turn_count']} |",
+        f"| Final Step | `{metrics['final_step']}` |",
+        f"| Workflow Run ID | `{metrics['workflow_run_id']}` |",
+        f"| Status | {'PASS' if metrics['status'] == 'PASS' else 'FAIL'} |",
+        "",
+    ]
+
+    # Comparison table
+    if prev:
+        lines.extend(
+            [
+                "## Comparison with Previous Run",
+                "",
+                "| Metric | This Run | Previous Run | Delta |",
+                "|--------|----------|--------------|-------|",
+                f"| Timestamp | {metrics['timestamp']} | {prev['timestamp']} | — |",
+                f"| Duration | {metrics['duration_seconds']}s | "
+                f"{prev['duration_seconds']}s | "
+                f"{metrics['duration_seconds'] - prev['duration_seconds']:+.2f}s |",
+                f"| Turns | {metrics['turn_count']} | "
+                f"{prev['turn_count']} | "
+                f"{metrics['turn_count'] - prev['turn_count']:+d} |",
+                f"| Final Step | `{metrics['final_step']}` | `{prev['final_step']}` | — |",
+                f"| Status | {metrics['status']} | {prev['status']} | — |",
+                "",
+            ]
+        )
+
+    # Artifacts table
+    lines.extend(
+        [
+            "## Generated Artifacts",
+            "",
+            "| File | Size |",
+            "|------|------|",
+        ]
+    )
+    for art in artifacts:
+        lines.append(f"| `{art['path']}` | {art['size_human']} |")
+    lines.append("")
+
+    # Test results
+    lines.extend(
+        [
+            "## Test Results",
+            "",
+            "| Suite | Result |",
+            "|-------|--------|",
+            f"| `tests/test_app.py` | {'PASS' if metrics['tests_passed'] else 'FAIL'} |",
+            "",
+        ]
+    )
+    if not metrics["tests_passed"]:
+        lines.extend(
+            [
+                "### Test Failure Details",
+                "",
+                "```",
+                metrics.get("test_stdout", ""),
+                metrics.get("test_stderr", ""),
+                "```",
+                "",
+            ]
+        )
+
+    # History
+    if len(previous_reports) >= 1:
+        lines.extend(
+            [
+                "## Run History",
+                "",
+                "| # | Timestamp | Duration | Turns | Status |",
+                "|---|-----------|----------|-------|--------|",
+            ]
+        )
+        for i, r in enumerate(previous_reports + [metrics], start=1):
+            lines.append(
+                f"| {i} | {r['timestamp']} | {r['duration_seconds']}s | "
+                f"{r['turn_count']} | {r['status']} |"
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "---",
+            "",
+            f"*Report generated by `test_kimi_usability.py` at {metrics['timestamp']}*",
+        ]
+    )
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return report_path
 
 
 @pytest.mark.slow
@@ -391,7 +635,9 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
 
     The project directory is persisted at tests/e2e/taskflow_e2e/ for manual inspection.
     Any previous run is cleaned up before starting.
+    A Markdown comparison report is written to tests/e2e/reports/.
     """
+    run_start = time.time()
     run_id = _setup_project()
     initial_prompt = _build_prompt(run_id or "<run_id>")
 
@@ -409,9 +655,11 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
     all_outputs: list[str] = []
 
     max_turns = 5
+    turn_count = 0
     for turn in range(max_turns):
         prompt = initial_prompt if turn == 0 else continuation_prompt
         result = _run_kimi(kimi_executable, E2E_PROJECT_DIR, prompt)
+        turn_count += 1
 
         turn_header = f"\n=== TURN {turn + 1} ===\n"
         turn_output = turn_header + result.stdout + "\n=== STDERR ===\n" + result.stderr
@@ -428,13 +676,15 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
             continue
 
         import toml
+
         state = toml.load(state_path)
         current_step = state.get("current_step")
 
         # If we've reached finish, try one more turn to actually complete it
         if current_step == "finish":
-            # One extra turn to run `devflow done` on finish and get "Workflow complete!"
+            # One extra turn to run `devflow done` on finish
             result = _run_kimi(kimi_executable, E2E_PROJECT_DIR, continuation_prompt)
+            turn_count += 1
             turn_header = "\n=== FINAL TURN ===\n"
             turn_output = turn_header + result.stdout + "\n=== STDERR ===\n" + result.stderr
             all_outputs.append(turn_output)
@@ -446,6 +696,7 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
 
     # Final assertions based on filesystem state
     import toml
+
     state = toml.load(state_path)
     current_step = state.get("current_step")
     assert current_step == "finish", (
@@ -468,9 +719,9 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
     for f in required_files:
         assert f.exists(), f"Missing expected artifact: {f.relative_to(E2E_PROJECT_DIR)}"
 
-    req_content = (E2E_PROJECT_DIR / "docs" / "requirements" / f"REQ-{run_id_actual}.md").read_text()
-    # Note: agent may overwrite the REQ file during finish; we only strictly
-    # require the final gate condition (status: done) to be satisfied.
+    req_content = (
+        E2E_PROJECT_DIR / "docs" / "requirements" / f"REQ-{run_id_actual}.md"
+    ).read_text()
     assert "status: done" in req_content, "REQ file missing 'status: done'"
 
     test_env = os.environ.copy()
@@ -490,3 +741,12 @@ def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
     assert "workflow complete" in combined_output, (
         "Kimi output does not mention 'Workflow complete!' — it may have stopped early"
     )
+
+    # Generate comparison report
+    run_end = time.time()
+    artifacts = _list_artifacts(E2E_PROJECT_DIR)
+    metrics = _collect_run_metrics(
+        run_start, run_end, turn_count, run_id_actual, state, test_result
+    )
+    report_path = _generate_report(metrics, artifacts)
+    print(f"\n=== E2E REPORT generated: {report_path} ===\n")
