@@ -43,3 +43,12 @@ test_project_*/
 
 # DevFlow runtime state
 .devflow/state.toml
+
+# E2E test artifacts (preserved for manual review)
+tests/e2e/taskflow_e2e/
+tests/e2e/taskflow_e2e_backup/
+tests/e2e/buckshot_e2e/
+tests/e2e/buckshot_e2e_backup/
+
+# E2E test reports (generated locally, not version controlled)
+tests/e2e/reports/

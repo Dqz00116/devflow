@@ -1,8 +1,8 @@
-"""E2E usability test: use real local Kimi CLI to drive DevFlow v2.0 end-to-end.
+"""E2E test: Buckshot Roulette — use real local Kimi CLI to drive DevFlow v2.0 end-to-end.
 
 This test:
 1. Detects a locally installed Kimi CLI (kimi / kimi-cli / kimi-code)
-2. Sets up a persistent ChatIM project under tests/e2e/taskflow_e2e/
+2. Sets up a persistent Buckshot Roulette project under tests/e2e/buckshot_e2e/
 3. Cleans up any previous test artifacts before starting
 4. Sends a comprehensive prompt to Kimi asking it to follow DevFlow
 5. Waits for completion (up to 10 minutes)
@@ -11,7 +11,7 @@ This test:
 
 Requirements:
 - Kimi CLI must be installed and available in PATH
-- The CLI should support non-interactive execution via `-c <prompt>` or stdin pipe
+- The CLI should support non-interactive execution via stdin pipe
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ KIMI_CANDIDATES = ["kimi", "kimi-cli", "kimi-code"]
 REPO_SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
 
 # Persistent project directory for inspection after test runs
-E2E_PROJECT_DIR = Path(__file__).resolve().parent / "taskflow_e2e"
+E2E_PROJECT_DIR = Path(__file__).resolve().parent / "buckshot_e2e"
 E2E_REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 
@@ -254,7 +254,7 @@ def _run_kimi(
         env=env,
         capture_output=True,
         text=True,
-        timeout=600,  # 10 minutes should be enough for a small project
+        timeout=1800,  # 30 minutes — Buckshot Roulette is complex
     )
 
 
@@ -285,7 +285,7 @@ def _setup_project() -> str:
             "--language",
             "python",
             "--name",
-            "ChatIM",
+            "BuckshotRoulette",
         ],
         cwd=str(E2E_PROJECT_DIR),
         capture_output=True,
@@ -327,66 +327,111 @@ def _setup_project() -> str:
         "from fastapi.testclient import TestClient\n"
         "from src.main import app\n\n"
         "client = TestClient(app)\n\n"
-        'def test_register_user():\n'
-        '    response = client.post("/users", json={"username": "alice", "password": "secret"})\n'
-        "    assert response.status_code == 201\n"
-        "    data = response.json()\n"
-        '    assert data["username"] == "alice"\n'
-        '    assert "id" in data\n'
-        '    assert "password" not in data\n\n'
-        'def test_register_duplicate_user_rejects():\n'
-        '    client.post("/users", json={"username": "bob", "password": "secret"})\n'
-        '    response = client.post("/users", json={"username": "bob", "password": "secret"})\n'
-        "    assert response.status_code == 409\n\n"
-        'def test_login_success():\n'
-        '    client.post("/users", json={"username": "charlie", "password": "secret"})\n'
-        '    response = client.post("/login", json={"username": "charlie", "password": "secret"})\n'
-        "    assert response.status_code == 200\n"
-        '    assert "token" in response.json()\n\n'
-        'def test_login_wrong_password():\n'
-        '    client.post("/users", json={"username": "dave", "password": "secret"})\n'
-        '    response = client.post("/login", json={"username": "dave", "password": "wrong"})\n'
-        "    assert response.status_code == 401\n\n"
-        'def test_send_message_and_get_conversation():\n'
-        '    client.post("/users", json={"username": "sender", "password": "s"})\n'
-        '    client.post("/users", json={"username": "receiver", "password": "r"})\n'
-        '    msg = {"from_user": "sender", "to_user": "receiver", "content": "hello"}\n'
-        '    post_resp = client.post("/messages", json=msg)\n'
-        "    assert post_resp.status_code == 201\n"
-        '    assert post_resp.json()["read"] is False\n\n'
-        '    get_resp = client.get("/messages/sender")\n'
-        "    assert get_resp.status_code == 200\n"
-        '    msgs = get_resp.json()\n'
-        '    assert len(msgs) == 1\n'
-        '    assert msgs[0]["content"] == "hello"\n'
-        '    assert msgs[0]["from_user"] == "sender"\n\n'
-        'def test_send_to_nonexistent_user_returns_404():\n'
-        '    client.post("/users", json={"username": "only", "password": "x"})\n'
-        '    msg = {"from_user": "only", "to_user": "nobody", "content": "hi"}\n'
-        '    response = client.post("/messages", json=msg)\n'
-        "    assert response.status_code == 404\n\n"
-        'def test_messages_isolated_between_users():\n'
-        '    client.post("/users", json={"username": "a", "password": "x"})\n'
-        '    client.post("/users", json={"username": "b", "password": "x"})\n'
-        '    client.post("/users", json={"username": "c", "password": "x"})\n'
-        '    client.post("/messages", json={"from_user": "a", "to_user": "b", "content": "ab"})\n'
-        '    msgs = client.get("/messages/c").json()\n'
-        '    assert len(msgs) == 0\n'
-        '    msgs = client.get("/messages/b").json()\n'
-        '    assert len(msgs) == 1\n\n'
-        'def test_unread_count_and_read_status():\n'
-        '    client.post("/users", json={"username": "u1", "password": "x"})\n'
-        '    client.post("/users", json={"username": "u2", "password": "x"})\n'
-        '    client.post("/messages", json={"from_user": "u1", "to_user": "u2", "content": "m1"})\n'
-        '    contacts = client.get("/contacts/u2").json()\n'
-        '    assert len(contacts) == 1\n'
-        '    assert contacts[0]["username"] == "u1"\n'
-        '    assert contacts[0]["unread_count"] == 1\n\n'
-        '    client.post("/messages/read", json={"from_user": "u1", "to_user": "u2"})\n'
-        '    contacts = client.get("/contacts/u2").json()\n'
-        '    assert contacts[0]["unread_count"] == 0\n\n'
-        '    msgs = client.get("/messages/u2").json()\n'
-        '    assert msgs[0]["read"] is True\n',
+        "def _start(**kwargs):\n"
+        '    r = client.post("/game/start", json=kwargs)\n'
+        "    assert r.status_code == 200\n"
+        "    return r.json()\n\n"
+        'def test_start_game_default():\n'
+        '    state = _start()\n'
+        '    assert state["round"] == 1\n'
+        '    assert state["player_charges"] == 2\n'
+        '    assert state["dealer_charges"] == 2\n'
+        '    assert len(state["chamber"]) == 3\n'
+        '    assert any(state["chamber"])\n'
+        '    assert not all(state["chamber"])\n'
+        '    assert state["current_turn"] == "player"\n'
+        '    assert state["game_over"] is False\n\n'
+        'def test_start_game_forced_chamber():\n'
+        '    state = _start(forced_chamber=[True, False, True])\n'
+        '    assert state["chamber"] == [True, False, True]\n\n'
+        'def test_shoot_self_live_loses_charge():\n'
+        '    _start(forced_chamber=[True], player_charges=1, dealer_charges=1)\n'
+        '    r = client.post("/game/action", json={"action": "shoot_self"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["player_charges"] == 0\n'
+        '    assert state["game_over"] is True\n'
+        '    assert state["winner"] == "dealer"\n\n'
+        'def test_shoot_self_blank_no_charge_loss():\n'
+        '    _start(forced_chamber=[False, True], player_charges=2, dealer_charges=2)\n'
+        '    r = client.post("/game/action", json={"action": "shoot_self"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["player_charges"] == 2\n'
+        '    assert state["current_turn"] == "dealer"\n\n'
+        'def test_shoot_opponent_live_dealer_loses_charge():\n'
+        '    _start(forced_chamber=[True], player_charges=1, dealer_charges=1)\n'
+        '    r = client.post("/game/action", json={"action": "shoot_opponent"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["dealer_charges"] == 0\n'
+        '    assert state["game_over"] is True\n'
+        '    assert state["winner"] == "player"\n\n'
+        'def test_shoot_opponent_blank_turn_switches():\n'
+        '    _start(forced_chamber=[False, True], player_charges=2, dealer_charges=2)\n'
+        '    r = client.post("/game/action", json={"action": "shoot_opponent"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["dealer_charges"] == 2\n'
+        '    assert state["current_turn"] == "dealer"\n\n'
+        'def test_use_magnifier_reveals_shell():\n'
+        '    _start(forced_chamber=[True, False], player_charges=2, dealer_charges=2)\n'
+        '    r = client.post("/game/action", json={"action": "use_magnifier"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["last_magnifier_result"] == "live"\n'
+        '    assert "magnifier" not in state["player_items"]\n\n'
+        'def test_use_handcuffs_skips_dealer_turn():\n'
+        '    _start(forced_chamber=[False, True], player_charges=2, dealer_charges=2,\n'
+        '           player_items=["handcuffs"], dealer_items=[])\n'
+        '    r = client.post("/game/action", json={"action": "use_handcuffs"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["dealer_skipped"] is True\n'
+        '    assert "handcuffs" not in state["player_items"]\n'
+        '    # shoot opponent (blank) — turn would normally go to dealer, but handcuffs skip\n'
+        '    r2 = client.post("/game/action", json={"action": "shoot_opponent"})\n'
+        "    assert r2.status_code == 200\n"
+        '    state2 = r2.json()\n'
+        '    assert state2["current_turn"] == "player"\n'
+        '    assert state2["dealer_skipped"] is False\n\n'
+        'def test_ai_turn_makes_valid_action():\n'
+        '    _start(forced_chamber=[False, True], player_charges=2, dealer_charges=2,\n'
+        '           player_items=[], dealer_items=[])\n'
+        '    client.post("/game/action", json={"action": "shoot_self"})\n'
+        '    r = client.post("/game/ai-turn")\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert len(state["action_log"]) >= 1\n'
+        '    assert any("dealer:" in entry for entry in state["action_log"])\n\n'
+        'def test_game_over_player_wins():\n'
+        '    _start(forced_chamber=[True], player_charges=2, dealer_charges=1)\n'
+        '    r = client.post("/game/action", json={"action": "shoot_opponent"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["game_over"] is True\n'
+        '    assert state["winner"] == "player"\n'
+        '    # actions after game over should fail\n'
+        '    r2 = client.post("/game/action", json={"action": "shoot_self"})\n'
+        "    assert r2.status_code == 400\n\n"
+        'def test_game_over_dealer_wins():\n'
+        '    _start(forced_chamber=[True], player_charges=1, dealer_charges=2)\n'
+        '    r = client.post("/game/action", json={"action": "shoot_self"})\n'
+        "    assert r.status_code == 200\n"
+        '    state = r.json()\n'
+        '    assert state["game_over"] is True\n'
+        '    assert state["winner"] == "dealer"\n\n'
+        'def test_invalid_action_returns_400():\n'
+        '    _start()\n'
+        '    r = client.post("/game/action", json={"action": "dance"})\n'
+        "    assert r.status_code == 400\n\n"
+        'def test_chamber_reload_when_empty():\n'
+        '    _start(forced_chamber=[True], player_charges=2, dealer_charges=2)\n'
+        '    client.post("/game/action", json={"action": "shoot_opponent"})\n'
+        '    state = client.get("/game/state").json()\n'
+        '    assert len(state["chamber"]) == 3\n'
+        '    assert state["current_shell_index"] == 0\n'
+        '    assert state["round"] == 2\n',
         encoding="utf-8",
     )
 
@@ -425,30 +470,39 @@ def _build_prompt(run_id: str) -> str:
         "6. NEVER skip steps and NEVER create files "
         "for future steps ahead of time\n"
         '7. Do not stop until you see "Workflow complete!"\n\n'
-        "PROJECT: ChatIM\n"
+        "PROJECT: Buckshot Roulette\n"
         "- Backend: Python FastAPI in `src/main.py`\n"
-        "- Frontend: `index.html` with Tailwind CSS via CDN (no build tools)\n"
-        "- Storage: in-memory Python dict (no SQLite/Postgres)\n"
+        "- Frontend: `index.html` with Three.js (OrthographicCamera, 2D flat style)\n"
+        "- No build tools: Three.js from CDN, plain HTML/JS/CSS\n"
         "- Tests: `tests/test_app.py` already exists. You must make them pass.\n\n"
         "ORIGINAL REQUIREMENTS:\n"
-        "Build a simple instant messaging system where:\n"
-        "- Users can register (unique username) and login.\n"
-        "- Users can send messages to each other.\n"
-        "- Messages have a read/unread state.\n"
-        "- Users see a contact list of people they have conversed with, "
-        "showing the last message preview and unread badge count.\n"
-        "- The frontend provides a near-realtime chat experience.\n"
-        "- Visiting the root URL serves the frontend.\n\n"
+        "Build a 2D 'Buckshot Roulette' turn-based game:\n"
+        "- Two characters: Player (human) and Dealer (AI).\n"
+        "- Each starts with 2 charges (lives).\n"
+        "- A shotgun chamber holds 3 shells per round (2 live, 1 blank in random order).\n"
+        "- Players take turns deciding: shoot themselves, shoot the opponent, or use an item.\n"
+        "- Live shell = target loses 1 charge. Blank shell = no damage. Turn always passes after any shot.\n"
+        "- When chamber empties, a new round starts with a fresh chamber (round counter increments).\n"
+        "- Game ends when either side reaches 0 charges.\n"
+        "- Items (simplified): Magnifier (reveals current shell), Handcuffs (opponent skips next turn).\n"
+        "- Dealer AI: uses Magnifier if available and shell unknown; if shell known live -> shoot opponent; if known blank -> shoot self; otherwise random-ish.\n"
+        "- Frontend: Three.js orthographic camera, 2D flat UI showing both characters, chamber shells, charges (hearts/lives), action buttons, round info, action log, and particle effects (muzzle flash, blood splatter) on shots.\n"
+        "- Visiting root URL serves the frontend.\n\n"
         "CORE PRINCIPLES (non-negotiable):\n"
-        "- CORS enabled (allow_origins=['*']) so frontend works from any origin.\n"
-        "- Sending to a non-existent user MUST fail (404), not silently succeed.\n"
-        "- Unread count is precise: only unread messages SENT TO the current user.\n"
-        "- Conversations are chronologically ordered (oldest first).\n"
-        "- Data isolation: user A cannot see messages between B and C.\n"
-        "- Frontend is a TWO-PANEL layout: contacts sidebar + active conversation view.\n"
-        "- Selecting a contact clears unread for that specific conversation.\n"
-        "- Messages refresh automatically (polling) for near-realtime feel.\n"
-        "- All styling uses Tailwind CSS utility classes.\n\n"
+        "- CORS enabled (allow_origins=['*']).\n"
+        "- Game state is server-side; frontend polls GET /game/state and renders it.\n"
+        "- POST /game/start accepts optional `forced_chamber` (list of bools) for deterministic testing.\n"
+        "- POST /game/action accepts {action: 'shoot_self'|'shoot_opponent'|'use_magnifier'|'use_handcuffs'}.\n"
+        "- POST /game/ai-turn triggers the dealer's turn and returns the updated state.\n"
+        "- State includes: round, player_charges, dealer_charges, chamber (list of bools), current_shell_index, current_turn, player_items, dealer_items, game_over, winner, action_log, last_magnifier_result, dealer_skipped.\n"
+        "- Actions after game_over must return 400.\n"
+        "- Invalid action strings return 400.\n"
+        "- Three.js scene uses OrthographicCamera for a flat 2D board-game look.\n"
+        "- Shells are rendered as visible objects (e.g., rectangles/cylinders); live vs blank can be distinguished visually once revealed via Magnifier.\n"
+        "- Rich animations: idle breathing/floating for characters; recoil kick on every shot; screen-shake on live hits; shell ejection/fly-out when fired; chamber reload slide-in animation.\n"
+        "- Effect animations: red flash overlay on character damage; handcuffs lock-chain visual when used; magnifier lens-beam sweep over current shell; turn-indicator pulse on switch.\n"
+        "- Game-over animation: winner text scales in with a burst of particles, loser dims out.\n"
+        "- All animations are tweened (lerp/sine) in the render loop — no CSS animations on Three.js objects.\n\n"
         "STRICT ACCEPTANCE:\n"
         "The file `tests/test_app.py` is the SOLE acceptance criteria. "
         "Read it carefully to infer the exact expected API shapes and behavior. "
@@ -472,8 +526,8 @@ def _build_prompt(run_id: str) -> str:
         "   b. Do the step\n"
         "   c. `devflow done`\n"
         "   d. Fix any gate failures and repeat c\n"
-        "3. When you reach `implement-tdd`, write the FastAPI app "
-        "and frontend, then run tests until they pass.\n"
+        "3. When you reach `implement-tdd`, write the FastAPI game backend "
+        "and Three.js frontend, then run tests until they pass.\n"
         f"4. For `code-review`, self-approve with "
         f"`devflow approve CODE-REVIEW-{run_id}`.\n"
         "5. For `finish`, update the REQ file to include "
@@ -676,10 +730,10 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
 
 
 @pytest.mark.slow
-def test_kimi_completes_chatim_with_devflow(kimi_executable: str) -> None:
+def test_kimi_completes_buckshot_with_devflow(kimi_executable: str) -> None:
     """End-to-end test: Kimi CLI should complete the full DevFlow workflow.
 
-    The project directory is persisted at tests/e2e/taskflow_e2e/ for manual inspection.
+    The project directory is persisted at tests/e2e/buckshot_e2e/ for manual inspection.
     Any previous run is cleaned up before starting.
     A Markdown comparison report is written to tests/e2e/reports/.
     """
