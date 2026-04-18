@@ -2,7 +2,7 @@
 
 This test:
 1. Detects a locally installed Kimi CLI (kimi / kimi-cli / kimi-code)
-2. Sets up a persistent TaskFlow project under tests/e2e/taskflow_e2e/
+2. Sets up a persistent ChatIM project under tests/e2e/taskflow_e2e/
 3. Cleans up any previous test artifacts before starting
 4. Sends a comprehensive prompt to Kimi asking it to follow DevFlow
 5. Waits for completion (up to 10 minutes)
@@ -285,7 +285,7 @@ def _setup_project() -> str:
             "--language",
             "python",
             "--name",
-            "TaskFlow",
+            "ChatIM",
         ],
         cwd=str(E2E_PROJECT_DIR),
         capture_output=True,
@@ -327,31 +327,66 @@ def _setup_project() -> str:
         "from fastapi.testclient import TestClient\n"
         "from src.main import app\n\n"
         "client = TestClient(app)\n\n"
-        'def test_get_tasks_empty():\n'
-        '    response = client.get("/tasks")\n'
-        "    assert response.status_code == 200\n"
-        '    assert response.json() == []\n\n'
-        'def test_create_task():\n'
-        '    response = client.post("/tasks", json={"title": "Buy milk"})\n'
+        'def test_register_user():\n'
+        '    response = client.post("/users", json={"username": "alice", "password": "secret"})\n'
         "    assert response.status_code == 201\n"
         "    data = response.json()\n"
-        '    assert data["title"] == "Buy milk"\n'
-        '    assert data["completed"] is False\n'
-        '    assert "id" in data\n\n'
-        'def test_create_task_empty_title_rejects():\n'
-        '    response = client.post("/tasks", json={"title": ""})\n'
-        "    assert response.status_code == 422\n\n"
-        'def test_toggle_task():\n'
-        '    create = client.post("/tasks", json={"title": "Test"})\n'
-        "    task = create.json()\n"
-        '    response = client.patch(f"/tasks/{task[\'id\']}")\n'
+        '    assert data["username"] == "alice"\n'
+        '    assert "id" in data\n'
+        '    assert "password" not in data\n\n'
+        'def test_register_duplicate_user_rejects():\n'
+        '    client.post("/users", json={"username": "bob", "password": "secret"})\n'
+        '    response = client.post("/users", json={"username": "bob", "password": "secret"})\n'
+        "    assert response.status_code == 409\n\n"
+        'def test_login_success():\n'
+        '    client.post("/users", json={"username": "charlie", "password": "secret"})\n'
+        '    response = client.post("/login", json={"username": "charlie", "password": "secret"})\n'
         "    assert response.status_code == 200\n"
-        '    assert response.json()["completed"] is True\n\n'
-        'def test_delete_task():\n'
-        '    create = client.post("/tasks", json={"title": "Delete me"})\n'
-        "    task = create.json()\n"
-        '    response = client.delete(f"/tasks/{task[\'id\']}")\n'
-        "    assert response.status_code == 204\n",
+        '    assert "token" in response.json()\n\n'
+        'def test_login_wrong_password():\n'
+        '    client.post("/users", json={"username": "dave", "password": "secret"})\n'
+        '    response = client.post("/login", json={"username": "dave", "password": "wrong"})\n'
+        "    assert response.status_code == 401\n\n"
+        'def test_send_message_and_get_conversation():\n'
+        '    client.post("/users", json={"username": "sender", "password": "s"})\n'
+        '    client.post("/users", json={"username": "receiver", "password": "r"})\n'
+        '    msg = {"from_user": "sender", "to_user": "receiver", "content": "hello"}\n'
+        '    post_resp = client.post("/messages", json=msg)\n'
+        "    assert post_resp.status_code == 201\n"
+        '    assert post_resp.json()["read"] is False\n\n'
+        '    get_resp = client.get("/messages/sender")\n'
+        "    assert get_resp.status_code == 200\n"
+        '    msgs = get_resp.json()\n'
+        '    assert len(msgs) == 1\n'
+        '    assert msgs[0]["content"] == "hello"\n'
+        '    assert msgs[0]["from_user"] == "sender"\n\n'
+        'def test_send_to_nonexistent_user_returns_404():\n'
+        '    client.post("/users", json={"username": "only", "password": "x"})\n'
+        '    msg = {"from_user": "only", "to_user": "nobody", "content": "hi"}\n'
+        '    response = client.post("/messages", json=msg)\n'
+        "    assert response.status_code == 404\n\n"
+        'def test_messages_isolated_between_users():\n'
+        '    client.post("/users", json={"username": "a", "password": "x"})\n'
+        '    client.post("/users", json={"username": "b", "password": "x"})\n'
+        '    client.post("/users", json={"username": "c", "password": "x"})\n'
+        '    client.post("/messages", json={"from_user": "a", "to_user": "b", "content": "ab"})\n'
+        '    msgs = client.get("/messages/c").json()\n'
+        '    assert len(msgs) == 0\n'
+        '    msgs = client.get("/messages/b").json()\n'
+        '    assert len(msgs) == 1\n\n'
+        'def test_unread_count_and_read_status():\n'
+        '    client.post("/users", json={"username": "u1", "password": "x"})\n'
+        '    client.post("/users", json={"username": "u2", "password": "x"})\n'
+        '    client.post("/messages", json={"from_user": "u1", "to_user": "u2", "content": "m1"})\n'
+        '    contacts = client.get("/contacts/u2").json()\n'
+        '    assert len(contacts) == 1\n'
+        '    assert contacts[0]["username"] == "u1"\n'
+        '    assert contacts[0]["unread_count"] == 1\n\n'
+        '    client.post("/messages/read", json={"from_user": "u1", "to_user": "u2"})\n'
+        '    contacts = client.get("/contacts/u2").json()\n'
+        '    assert contacts[0]["unread_count"] == 0\n\n'
+        '    msgs = client.get("/messages/u2").json()\n'
+        '    assert msgs[0]["read"] is True\n',
         encoding="utf-8",
     )
 
@@ -390,23 +425,34 @@ def _build_prompt(run_id: str) -> str:
         "6. NEVER skip steps and NEVER create files "
         "for future steps ahead of time\n"
         '7. Do not stop until you see "Workflow complete!"\n\n'
-        "PROJECT: TaskFlow\n"
+        "PROJECT: ChatIM\n"
         "- Backend: Python FastAPI in `src/main.py`\n"
-        "- Frontend: `index.html` with inline JavaScript (no build tools)\n"
-        "- Storage: in-memory Python list or dict (no SQLite/Postgres)\n"
+        "- Frontend: `index.html` with Tailwind CSS via CDN (no build tools)\n"
+        "- Storage: in-memory Python dict (no SQLite/Postgres)\n"
         "- Tests: `tests/test_app.py` already exists. You must make them pass.\n\n"
-        "API Requirements for `src/main.py`:\n"
-        "- `GET /tasks` → return list of tasks, newest first\n"
-        '- `POST /tasks` → accepts `{"title": string}`, returns 201; '
-        "if title is empty string, return 422\n"
-        "- `PATCH /tasks/{id}` → toggle `completed` boolean, "
-        "return updated task\n"
-        "- `DELETE /tasks/{id}` → delete task, return 204\n\n"
-        "Frontend Requirements for `index.html`:\n"
-        "- Input box + Add button\n"
-        "- Display list of tasks with toggle (complete/uncomplete) "
-        "and delete buttons\n"
-        "- Must call the backend API endpoints above\n\n"
+        "ORIGINAL REQUIREMENTS:\n"
+        "Build a simple instant messaging system where:\n"
+        "- Users can register (unique username) and login.\n"
+        "- Users can send messages to each other.\n"
+        "- Messages have a read/unread state.\n"
+        "- Users see a contact list of people they have conversed with, "
+        "showing the last message preview and unread badge count.\n"
+        "- The frontend provides a near-realtime chat experience.\n"
+        "- Visiting the root URL serves the frontend.\n\n"
+        "CORE PRINCIPLES (non-negotiable):\n"
+        "- CORS enabled (allow_origins=['*']) so frontend works from any origin.\n"
+        "- Sending to a non-existent user MUST fail (404), not silently succeed.\n"
+        "- Unread count is precise: only unread messages SENT TO the current user.\n"
+        "- Conversations are chronologically ordered (oldest first).\n"
+        "- Data isolation: user A cannot see messages between B and C.\n"
+        "- Frontend is a TWO-PANEL layout: contacts sidebar + active conversation view.\n"
+        "- Selecting a contact clears unread for that specific conversation.\n"
+        "- Messages refresh automatically (polling) for near-realtime feel.\n"
+        "- All styling uses Tailwind CSS utility classes.\n\n"
+        "STRICT ACCEPTANCE:\n"
+        "The file `tests/test_app.py` is the SOLE acceptance criteria. "
+        "Read it carefully to infer the exact expected API shapes and behavior. "
+        "Every test must pass. Do NOT modify the tests.\n\n"
         "WORKFLOW HINT (E2E-MODE-A gates):\n"
         f"- req-create: needs `docs/requirements/REQ-{run_id}.md`\n"
         "- req-approve: needs REQ file containing `status: approved` + "
@@ -630,7 +676,7 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
 
 
 @pytest.mark.slow
-def test_kimi_completes_taskflow_with_devflow(kimi_executable: str) -> None:
+def test_kimi_completes_chatim_with_devflow(kimi_executable: str) -> None:
     """End-to-end test: Kimi CLI should complete the full DevFlow workflow.
 
     The project directory is persisted at tests/e2e/taskflow_e2e/ for manual inspection.
