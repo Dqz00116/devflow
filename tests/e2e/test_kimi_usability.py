@@ -1,17 +1,17 @@
-"""E2E usability test: use real local Kimi CLI to drive DevFlow v2.0 end-to-end.
+"""E2E usability test: use real local AI CLIs to drive DevFlow v2.0 end-to-end.
 
 This test:
-1. Detects a locally installed Kimi CLI (kimi / kimi-cli / kimi-code)
+1. Detects locally installed AI CLIs (kimi, claude, opencode)
 2. Sets up a persistent ChatIM project under tests/e2e/taskflow_e2e/
 3. Cleans up any previous test artifacts before starting
-4. Sends a comprehensive prompt to Kimi asking it to follow DevFlow
-5. Waits for completion (up to 10 minutes)
+4. Sends a prompt to each available CLI asking it to follow DevFlow
+5. Waits for completion (up to 10 minutes per tool)
 6. Asserts that all expected files exist, tests pass, and workflow is complete
 7. Generates a Markdown comparison report at tests/e2e/reports/
 
 Requirements:
-- Kimi CLI must be installed and available in PATH
-- The CLI should support non-interactive execution via `-c <prompt>` or stdin pipe
+- At least one supported AI CLI must be installed and available in PATH
+- Each CLI should support non-interactive execution
 """
 
 from __future__ import annotations
@@ -22,12 +22,13 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-KIMI_CANDIDATES = ["kimi", "kimi-cli", "kimi-code"]
 REPO_SRC_DIR = str(Path(__file__).resolve().parents[2] / "src")
 
 # Persistent project directory for inspection after test runs
@@ -35,16 +36,45 @@ E2E_PROJECT_DIR = Path(__file__).resolve().parent / "taskflow_e2e"
 E2E_REPORTS_DIR = Path(__file__).resolve().parent / "reports"
 
 
-def _which_kimi() -> str | None:
-    """Find Kimi executable in PATH."""
-    for name in KIMI_CANDIDATES:
+@dataclass
+class ToolConfig:
+    """Configuration for an AI CLI tool."""
+
+    tool_id: str
+    command_names: list[str]
+    help_keywords: list[str]
+
+
+# Supported AI tools and their configurations
+SUPPORTED_TOOLS: list[ToolConfig] = [
+    ToolConfig(
+        tool_id="kimi",
+        command_names=["kimi", "kimi-cli", "kimi-code"],
+        help_keywords=["chat", "prompt", "message", "ai", "model", "moonshot"],
+    ),
+    ToolConfig(
+        tool_id="claude",
+        command_names=["claude", "claude-code"],
+        help_keywords=["chat", "prompt", "message", "ai", "model", "anthropic", "claude"],
+    ),
+    ToolConfig(
+        tool_id="opencode",
+        command_names=["opencode", "opc"],
+        help_keywords=["chat", "prompt", "message", "ai", "model", "opencode"],
+    ),
+]
+
+
+def _which_tool(config: ToolConfig) -> str | None:
+    """Find tool executable in PATH."""
+    for name in config.command_names:
         path = shutil.which(name)
         if path:
             return path
     return None
 
 
-def _is_likely_ai_cli(executable: str) -> bool:
+def _is_likely_ai_cli(executable: str, keywords: list[str]) -> bool:
     """Heuristic: run --help and check for AI-related keywords."""
     try:
         result = subprocess.run(
@@ -54,112 +84,112 @@ def _is_likely_ai_cli(executable: str) -> bool:
             timeout=10,
         )
         help_text = (result.stdout + result.stderr).lower()
-        keywords = ["chat", "prompt", "message", "conversation", "ai", "model", "moonshot"]
         return any(k in help_text for k in keywords)
     except Exception:
         return False
 
 
-def _discover_kimi_invocation(  # noqa: C901
-    executable: str,
+def _discover_invocation(
+    executable: str, config: ToolConfig
 ) -> tuple[list[str], dict[str, str]] | None:
-    """Discover how to invoke Kimi in non-interactive mode.
+    """Discover how to invoke an AI CLI in non-interactive mode.
 
-    Kimi CLI supports `--print` (non-interactive) with `--input-format text` via stdin.
     Returns (args_list, extra_env) or None if we cannot determine a working mode.
     """
-    # Strategy 1: Kimi Code CLI print mode (preferred)
-    try:
-        result = subprocess.run(
-            [
-                executable,
-                "--print",
-                "--yolo",
-                "--input-format",
-                "text",
-                "--max-steps-per-turn",
-                "100",
-            ],
-            input="hello\n",
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        stderr = result.stderr.lower()
-        if (
-            "unknown" not in stderr
-            and "unrecognized" not in stderr
-            and all(
-                bad not in stderr
-                for bad in [
-                    "tty",
-                    "terminal",
-                    "curses",
-                    "interactive",
-                    "isatty",
-                ]
+    tool_id = config.tool_id
+
+    # Tool-specific preset strategies
+    if tool_id == "kimi":
+        presets = [
+            (["--print", "--yolo", "--input-format", "text", "--max-steps-per-turn", "100"], {}),
+            (["-c"], {}),
+            (["chat", "-c"], {}),
+            (["run"], {}),
+        ]
+    elif tool_id == "claude":
+        presets = [
+            (["-p", "--input-format", "text"], {}),
+            (["--print", "--input-format", "text"], {}),
+            (["-p"], {}),
+            (["--print"], {}),
+        ]
+    elif tool_id == "opencode":
+        presets = [
+            (["run"], {}),
+            (["run", "--format", "json"], {}),
+        ]
+    else:
+        presets = []
+
+    # Try presets first
+    for args_prefix, extra_env in presets:
+        try:
+            if tool_id in ("kimi", "claude"):
+                result = subprocess.run(
+                    [executable, *args_prefix],
+                    input="hello\n",
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+            elif tool_id == "opencode":
+                result = subprocess.run(
+                    [executable, *args_prefix, "hello"],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+            else:
+                result = subprocess.run(
+                    [executable, *args_prefix],
+                    input="hello\n",
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+
+            stderr = result.stderr.lower()
+            if (
+                "unknown" not in stderr
+                and "unrecognized" not in stderr
+                and "invalid" not in stderr
+                and all(
+                    bad not in stderr
+                    for bad in ["tty", "terminal", "curses", "interactive", "isatty"]
+                )
+            ):
+                return (args_prefix, extra_env)
+        except Exception:
+            pass
+
+    # Generic fallback strategies
+    generic_strategies = [
+        (["-c"], {}),
+        (["chat", "-c"], {}),
+        (["run"], {}),
+    ]
+    for args_prefix, extra_env in generic_strategies:
+        try:
+            result = subprocess.run(
+                [executable, *args_prefix, "hello"],
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
-        ):
-            return (
-                [
-                    "--print",
-                    "--yolo",
-                    "--input-format",
-                    "text",
-                    "--max-steps-per-turn",
-                    "100",
-                ],
-                {},
-            )
-    except Exception:
-        pass
+            stderr = result.stderr.lower()
+            if (
+                "unknown" not in stderr
+                and "unrecognized" not in stderr
+                and all(
+                    bad not in stderr
+                    for bad in ["tty", "terminal", "curses", "interactive", "isatty"]
+                )
+            ):
+                return (args_prefix, extra_env)
+        except Exception:
+            pass
 
-    # Strategy 2: try -c "hello"
-    try:
-        result = subprocess.run(
-            [executable, "-c", "hello"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if (
-            "unknown" not in result.stderr.lower()
-            and "unrecognized" not in result.stderr.lower()
-        ):
-            return (["-c"], {})
-    except Exception:
-        pass
-
-    # Strategy 3: try chat subcommand with -c
-    try:
-        result = subprocess.run(
-            [executable, "chat", "-c", "hello"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if (
-            "unknown" not in result.stderr.lower()
-            and "unrecognized" not in result.stderr.lower()
-        ):
-            return (["chat", "-c"], {})
-    except Exception:
-        pass
-
-    # Strategy 4: try run subcommand
-    try:
-        result = subprocess.run(
-            [executable, "run", "hello"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if "unknown" not in result.stderr.lower():
-            return (["run"], {})
-    except Exception:
-        pass
-
-    # Strategy 5: plain stdin pipe fallback
+    # Plain stdin pipe fallback
     try:
         result = subprocess.run(
             [executable],
@@ -171,13 +201,7 @@ def _discover_kimi_invocation(  # noqa: C901
         stderr = result.stderr.lower()
         if all(
             bad not in stderr
-            for bad in [
-                "tty",
-                "terminal",
-                "curses",
-                "interactive",
-                "isatty",
-            ]
+            for bad in ["tty", "terminal", "curses", "interactive", "isatty"]
         ):
             return ([], {})
     except Exception:
@@ -186,89 +210,59 @@ def _discover_kimi_invocation(  # noqa: C901
     return None
 
 
-@pytest.fixture(scope="module")
-def kimi_executable() -> str:
-    """Locate and validate Kimi CLI executable."""
-    path = _which_kimi()
-    if path is None:
-        pytest.skip(
-            "Kimi CLI not found in PATH. "
-            "Please install it (e.g. from https://www.moonshot.cn/ "
-            "or via your package manager) "
-            f"and ensure one of these commands is available: {', '.join(KIMI_CANDIDATES)}"
-        )
+def _find_available_tools() -> list[tuple[ToolConfig, str, tuple[list[str], dict[str, str]]]]:
+    """Find all available AI CLIs and their invocation modes.
 
-    if not _is_likely_ai_cli(path):
-        pytest.skip(
-            f"Command '{path}' was found but does not appear to be the Kimi AI CLI. "
-            f"Please ensure the correct executable is in PATH."
-        )
+    Returns a list of (ToolConfig, executable_path, invocation) tuples.
+    """
+    available = []
+    for config in SUPPORTED_TOOLS:
+        path = _which_tool(config)
+        if path is None:
+            continue
 
-    invocation = _discover_kimi_invocation(path)
-    if invocation is None:
-        pytest.skip(
-            f"Kimi CLI found at '{path}' but its non-interactive invocation mode "
-            "could not be determined. "
-            "Supported modes: -c <prompt>, chat -c <prompt>, "
-            "run <prompt>, or stdin pipe. "
-            "Try running it manually to find the right flag."
-        )
+        if not _is_likely_ai_cli(path, config.help_keywords):
+            continue
 
-    # Store invocation metadata for tests
-    kimi_executable._invocation = invocation  # type: ignore[attr-defined]
-    return path
+        invocation = _discover_invocation(path, config)
+        if invocation is None:
+            continue
+
+        available.append((config, path, invocation))
+
+    return available
 
 
-def _run_kimi(
-    executable: str, project_dir: Path, prompt: str
-) -> subprocess.CompletedProcess[str]:
-    """Run Kimi CLI with the given prompt."""
-    invocation = getattr(kimi_executable, "_invocation", ([], {}))
-    args_prefix, extra_env = invocation
+# Discover available tools at module load time
+_AVAILABLE_TOOLS = _find_available_tools()
 
-    env = os.environ.copy()
-    env["DEVFLOW_ALLOW_SHELL"] = "1"
-    env["PYTHONPATH"] = REPO_SRC_DIR
-    env.update(extra_env)
 
-    use_stdin = False
-    if args_prefix == ["-c"]:
-        cmd = [executable, "-c", prompt]
-    elif args_prefix == ["chat", "-c"]:
-        cmd = [executable, "chat", "-c", prompt]
-    elif args_prefix == ["run"]:
-        cmd = [executable, "run", prompt]
-    elif "--print" in args_prefix:
-        # Kimi print mode: flags go on command line, prompt via stdin
-        cmd = [executable, *args_prefix]
-        use_stdin = True
-    else:
-        # Generic stdin pipe mode
-        cmd = [executable]
-        use_stdin = True
-
-    return subprocess.run(
-        cmd,
-        input=prompt if use_stdin else None,
-        cwd=str(project_dir),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=600,  # 10 minutes should be enough for a small project
-    )
+# --- Project setup ---
 
 
 def _cleanup_previous_project() -> None:
     """Remove previous e2e project directory if it exists."""
+    if not E2E_PROJECT_DIR.exists():
+        return
+
+    for attempt in range(3):
+        try:
+            shutil.rmtree(E2E_PROJECT_DIR)
+            break
+        except PermissionError:
+            if attempt < 2:
+                time.sleep(0.5)
+            else:
+                raise
+
     if E2E_PROJECT_DIR.exists():
-        shutil.rmtree(E2E_PROJECT_DIR, ignore_errors=True)
+        raise RuntimeError(
+            f"Failed to clean up previous E2E project: {E2E_PROJECT_DIR}"
+        )
 
 
 def _setup_project() -> str:
-    """Initialize DevFlow project, custom workflow, tests, and requirements.
-
-    Returns the workflow_run_id if available.
-    """
+    """Initialize DevFlow project, custom workflow, tests, and requirements."""
     _cleanup_previous_project()
     E2E_PROJECT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -319,7 +313,7 @@ def _setup_project() -> str:
         encoding="utf-8",
     )
 
-    # 4. Create preset test file (trap test included)
+    # 4. Create preset test file
     tests_dir = E2E_PROJECT_DIR / "tests"
     tests_dir.mkdir(exist_ok=True)
     (tests_dir / "test_app.py").write_text(
@@ -398,7 +392,7 @@ def _setup_project() -> str:
     )
     config_path.write_text(config_text, encoding="utf-8")
 
-    # Read run_id from state after init (it may or may not exist yet)
+    # Read run_id from state after init
     state_path = E2E_PROJECT_DIR / ".devflow" / "state.toml"
     if state_path.exists():
         import toml
@@ -409,79 +403,98 @@ def _setup_project() -> str:
 
 
 def _build_prompt(run_id: str) -> str:
-    """Build the comprehensive prompt for Kimi."""
+    """Build the prompt for the AI agent.
+
+    We intentionally do NOT tell the agent how to use DevFlow.
+    The agent must read SKILL.md and follow the instructions on its own.
+    """
     return (
-        "You are an AI software engineer. Complete a full-stack project "
-        "by strictly following the DevFlow v2.0 CLI workflow.\n\n"
+        "You are an AI software engineer. Complete the following project "
+        "using the DevFlow v2.0 workflow system.\n\n"
         f"WORK DIRECTORY: {E2E_PROJECT_DIR}\n\n"
-        "CRITICAL RULES:\n"
-        "1. ALWAYS run `devflow current` first to know what to do\n"
-        "2. ONLY do what the current step says\n"
-        "3. After finishing the step, run `devflow done`\n"
-        "4. If `devflow done` fails, read the error, fix it, "
-        "and run `devflow done` again\n"
-        "5. If a step requires `user_approved`, "
-        "run `devflow approve <ITEM>` yourself and continue\n"
-        "6. NEVER skip steps and NEVER create files "
-        "for future steps ahead of time\n"
-        '7. Do not stop until you see "Workflow complete!"\n\n'
+        "Read SKILL.md in the project root and follow its instructions exactly. "
+        "Do NOT write any code or create any files until SKILL.md tells you to.\n\n"
         "PROJECT: ChatIM\n"
         "- Backend: Python FastAPI in `src/main.py`\n"
         "- Frontend: `index.html` with Tailwind CSS via CDN (no build tools)\n"
-        "- Storage: in-memory Python dict (no SQLite/Postgres)\n"
+        "- Storage: in-memory Python dict\n"
         "- Tests: `tests/test_app.py` already exists. You must make them pass.\n\n"
         "ORIGINAL REQUIREMENTS:\n"
         "Build a simple instant messaging system where:\n"
         "- Users can register (unique username) and login.\n"
         "- Users can send messages to each other.\n"
         "- Messages have a read/unread state.\n"
-        "- Users see a contact list of people they have conversed with, "
-        "showing the last message preview and unread badge count.\n"
+        "- Users see a contact list with last message preview and unread badge.\n"
         "- The frontend provides a near-realtime chat experience.\n"
         "- Visiting the root URL serves the frontend.\n\n"
         "CORE PRINCIPLES (non-negotiable):\n"
-        "- CORS enabled (allow_origins=['*']) so frontend works from any origin.\n"
-        "- Sending to a non-existent user MUST fail (404), not silently succeed.\n"
-        "- Unread count is precise: only unread messages SENT TO the current user.\n"
-        "- Conversations are chronologically ordered (oldest first).\n"
-        "- Data isolation: user A cannot see messages between B and C.\n"
-        "- Frontend is a TWO-PANEL layout: contacts sidebar + active conversation view.\n"
-        "- Selecting a contact clears unread for that specific conversation.\n"
-        "- Messages refresh automatically (polling) for near-realtime feel.\n"
-        "- All styling uses Tailwind CSS utility classes.\n\n"
+        "- CORS enabled (allow_origins=['*'])\n"
+        "- Sending to a non-existent user MUST fail (404)\n"
+        "- Unread count is precise: only unread messages SENT TO the current user\n"
+        "- Conversations are chronologically ordered (oldest first)\n"
+        "- Data isolation: user A cannot see messages between B and C\n"
+        "- Frontend is a TWO-PANEL layout: contacts sidebar + active conversation view\n"
+        "- Selecting a contact clears unread for that specific conversation\n"
+        "- Messages refresh automatically (polling)\n"
+        "- All styling uses Tailwind CSS utility classes\n\n"
         "STRICT ACCEPTANCE:\n"
         "The file `tests/test_app.py` is the SOLE acceptance criteria. "
-        "Read it carefully to infer the exact expected API shapes and behavior. "
-        "Every test must pass. Do NOT modify the tests.\n\n"
-        "WORKFLOW HINT (E2E-MODE-A gates):\n"
-        f"- req-create: needs `docs/requirements/REQ-{run_id}.md`\n"
-        "- req-approve: needs REQ file containing `status: approved` + "
-        f"`docs/features/FEAT-{run_id}.md`\n"
-        f"- brainstorm: needs `docs/superpowers/specs/DESIGN-{run_id}.md`\n"
-        f"- write-plan: needs `docs/superpowers/plans/PLAN-{run_id}.md`\n"
-        "- implement-tdd: `pytest tests/test_app.py -v` must pass\n"
-        f"- code-review: run `devflow approve CODE-REVIEW-{run_id}` then done\n"
-        "- test-run: tests must pass\n"
-        f"- verify: needs `docs/evidence/EVIDENCE-{run_id}.md`\n"
-        "- finish: needs `docs/completion/COMPLETION-{run_id}.md` + "
-        "REQ file containing `status: done`\n\n"
-        "STEP-BY-STEP GUIDE:\n"
-        "1. Run `devflow select-workflow E2E-MODE-A`\n"
-        "2. Loop:\n"
-        "   a. `devflow current`\n"
-        "   b. Do the step\n"
-        "   c. `devflow done`\n"
-        "   d. Fix any gate failures and repeat c\n"
-        "3. When you reach `implement-tdd`, write the FastAPI app "
-        "and frontend, then run tests until they pass.\n"
-        f"4. For `code-review`, self-approve with "
-        f"`devflow approve CODE-REVIEW-{run_id}`.\n"
-        "5. For `finish`, update the REQ file to include "
-        "`status: done` and create the COMPLETION file.\n\n"
-        "IMPORTANT: Start by running `devflow select-workflow E2E-MODE-A` "
-        "and then `devflow current`.\n"
+        "Read it carefully. Every test must pass. Do NOT modify the tests.\n\n"
         f"Do everything inside {E2E_PROJECT_DIR}.\n"
     )
+
+
+# --- Running agent ---
+
+
+def _run_tool(
+    config: ToolConfig,
+    executable: str,
+    invocation: tuple[list[str], dict[str, str]],
+    project_dir: Path,
+    prompt: str,
+) -> subprocess.CompletedProcess[str]:
+    """Run an AI CLI with the given prompt."""
+    args_prefix, extra_env = invocation
+    tool_id = config.tool_id
+
+    env = os.environ.copy()
+    env["DEVFLOW_ALLOW_SHELL"] = "1"
+    env["PYTHONPATH"] = REPO_SRC_DIR
+    env.update(extra_env)
+
+    use_stdin = False
+
+    if tool_id == "kimi" and "--print" in args_prefix:
+        cmd = [executable, *args_prefix]
+        use_stdin = True
+    elif tool_id == "claude" and ("-p" in args_prefix or "--print" in args_prefix):
+        cmd = [executable, *args_prefix]
+        use_stdin = True
+    elif args_prefix == ["-c"]:
+        cmd = [executable, "-c", prompt]
+    elif args_prefix == ["chat", "-c"]:
+        cmd = [executable, "chat", "-c", prompt]
+    elif args_prefix == ["run"]:
+        cmd = [executable, "run", prompt]
+    elif tool_id == "opencode" and "run" in args_prefix:
+        cmd = [executable, *args_prefix, prompt]
+    else:
+        cmd = [executable]
+        use_stdin = True
+
+    return subprocess.run(
+        cmd,
+        input=prompt if use_stdin else None,
+        cwd=str(project_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+
+
+# --- Metrics and reporting ---
 
 
 def _collect_run_metrics(
@@ -491,10 +504,12 @@ def _collect_run_metrics(
     run_id: str,
     state: dict,
     test_result: subprocess.CompletedProcess[str],
+    tool_id: str,
 ) -> dict:
     """Collect metrics from the completed run for the report."""
-    metrics = {
+    return {
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        "tool_id": tool_id,
         "duration_seconds": round(end_time - start_time, 2),
         "turn_count": turn_count,
         "final_step": state.get("current_step", "unknown"),
@@ -504,7 +519,6 @@ def _collect_run_metrics(
         "test_stdout": test_result.stdout if test_result.returncode == 0 else "",
         "test_stderr": test_result.stderr if test_result.returncode != 0 else "",
     }
-    return metrics
 
 
 def _list_artifacts(project_dir: Path) -> list[dict]:
@@ -515,7 +529,7 @@ def _list_artifacts(project_dir: Path) -> list[dict]:
         "src/*.py",
         "index.html",
         "tests/*.py",
-        "kimi_e2e.log",
+        "*_e2e.log",
     ]:
         for fp in project_dir.glob(pattern):
             if fp.is_file():
@@ -555,30 +569,33 @@ def _load_previous_reports() -> list[dict]:
     return reports
 
 
-def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
+def _generate_report(
+    metrics: dict, artifacts: list[dict]
+) -> Path:
     """Generate a Markdown comparison report and save it.
 
     Returns the path to the generated report.
     """
     E2E_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    tool_id = metrics["tool_id"]
     timestamp = metrics["timestamp"].replace(":", "-")
-    report_path = E2E_REPORTS_DIR / f"report_{timestamp}.md"
-    json_path = E2E_REPORTS_DIR / f"report_{timestamp}.json"
+    report_path = E2E_REPORTS_DIR / f"report_{tool_id}_{timestamp}.md"
+    json_path = E2E_REPORTS_DIR / f"report_{tool_id}_{timestamp}.json"
 
-    # Save raw metrics for future comparisons
     json_path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
 
     previous_reports = _load_previous_reports()
     prev = previous_reports[-1] if previous_reports else None
 
     lines = [
-        f"# E2E Test Report — {metrics['timestamp']}",
+        f"# E2E Test Report — {metrics['tool_id']} — {metrics['timestamp']}",
         "",
         "## Run Summary",
         "",
         "| Metric | Value |",
         "|--------|-------|",
+        f"| Tool | `{metrics['tool_id']}` |",
         f"| Timestamp | {metrics['timestamp']} |",
         f"| Duration | {metrics['duration_seconds']}s |",
         f"| Total Turns | {metrics['turn_count']} |",
@@ -588,7 +605,6 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
         "",
     ]
 
-    # Comparison table
     if prev:
         lines.extend(
             [
@@ -609,7 +625,6 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
             ]
         )
 
-    # Artifacts table
     lines.extend(
         [
             "## Generated Artifacts",
@@ -622,7 +637,6 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
         lines.append(f"| `{art['path']}` | {art['size_human']} |")
     lines.append("")
 
-    # Test results
     lines.extend(
         [
             "## Test Results",
@@ -646,20 +660,19 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
             ]
         )
 
-    # History
     if len(previous_reports) >= 1:
         lines.extend(
             [
                 "## Run History",
                 "",
-                "| # | Timestamp | Duration | Turns | Status |",
-                "|---|-----------|----------|-------|--------|",
+                "| # | Tool | Timestamp | Duration | Turns | Status |",
+                "|---|------|-----------|----------|-------|--------|",
             ]
         )
         for i, r in enumerate(previous_reports + [metrics], start=1):
             lines.append(
-                f"| {i} | {r['timestamp']} | {r['duration_seconds']}s | "
-                f"{r['turn_count']} | {r['status']} |"
+                f"| {i} | {r.get('tool_id', '?')} | {r['timestamp']} | "
+                f"{r['duration_seconds']}s | {r['turn_count']} | {r['status']} |"
             )
         lines.append("")
 
@@ -675,50 +688,73 @@ def _generate_report(metrics: dict, artifacts: list[dict]) -> Path:
     return report_path
 
 
+# --- Pytest fixtures and tests ---
+
+
+@pytest.fixture(scope="module", params=[
+    pytest.param(
+        (config, path, invocation),
+        id=config.tool_id,
+    )
+    for config, path, invocation in _AVAILABLE_TOOLS
+] if _AVAILABLE_TOOLS else [
+    pytest.param(None, id="no-tools")
+])
+def ai_tool(request: Any) -> tuple[ToolConfig, str, tuple[list[str], dict[str, str]]] | None:
+    """Provide each available AI CLI tool as a test parameter."""
+    if request.param is None:
+        pytest.skip(
+            "No supported AI CLI found in PATH. "
+            f"Supported tools: {', '.join(t.tool_id for t in SUPPORTED_TOOLS)}"
+        )
+    return request.param
+
+
 @pytest.mark.slow
-def test_kimi_completes_chatim_with_devflow(kimi_executable: str) -> None:
-    """End-to-end test: Kimi CLI should complete the full DevFlow workflow.
+def test_agent_completes_chatim_with_devflow(
+    ai_tool: tuple[ToolConfig, str, tuple[list[str], dict[str, str]]],
+) -> None:
+    """End-to-end test: AI CLI should complete the full DevFlow workflow.
 
     The project directory is persisted at tests/e2e/taskflow_e2e/ for manual inspection.
     Any previous run is cleaned up before starting.
     A Markdown comparison report is written to tests/e2e/reports/.
     """
+    config, executable, invocation = ai_tool
+    tool_id = config.tool_id
+
     run_start = time.time()
     run_id = _setup_project()
     initial_prompt = _build_prompt(run_id or "<run_id>")
 
     continuation_prompt = (
-        "Continue the DevFlow workflow from the current step.\n"
-        "1. Run `devflow current` to see what to do.\n"
-        "2. Execute the step.\n"
-        "3. Run `devflow done`.\n"
-        "4. If gates fail, fix the issue and run `devflow done` again.\n"
-        "5. If a step needs `user_approved`, run `devflow approve <ITEM>` yourself.\n"
-        "Repeat until you see 'Workflow complete!'. Do not stop early."
+        "Continue working on the ChatIM project. "
+        "Read SKILL.md again if you need guidance. "
+        "Do not stop until the workflow is complete."
     )
 
-    log_path = E2E_PROJECT_DIR / "kimi_e2e.log"
+    log_path = E2E_PROJECT_DIR / f"{tool_id}_e2e.log"
     all_outputs: list[str] = []
 
     max_turns = 5
     turn_count = 0
     for turn in range(max_turns):
         prompt = initial_prompt if turn == 0 else continuation_prompt
-        result = _run_kimi(kimi_executable, E2E_PROJECT_DIR, prompt)
+        result = _run_tool(config, executable, invocation, E2E_PROJECT_DIR, prompt)
         turn_count += 1
 
-        turn_header = f"\n=== TURN {turn + 1} ===\n"
+        turn_header = f"\n=== {tool_id.upper()} TURN {turn + 1} ===\n"
         turn_output = turn_header + result.stdout + "\n=== STDERR ===\n" + result.stderr
         all_outputs.append(turn_output)
         log_path.write_text("\n".join(all_outputs), encoding="utf-8")
 
         print(turn_output)
-        print(f"\n=== TURN {turn + 1} RETURN CODE: {result.returncode} ===\n")
+        print(f"\n=== {tool_id.upper()} TURN {turn + 1} RETURN CODE: {result.returncode} ===\n")
 
         state_path = E2E_PROJECT_DIR / ".devflow" / "state.toml"
         if not state_path.exists():
             if turn == max_turns - 1:
-                pytest.fail("DevFlow state file was never created after max turns")
+                pytest.fail(f"DevFlow state file was never created after {max_turns} turns")
             continue
 
         import toml
@@ -726,12 +762,10 @@ def test_kimi_completes_chatim_with_devflow(kimi_executable: str) -> None:
         state = toml.load(state_path)
         current_step = state.get("current_step")
 
-        # If we've reached finish, try one more turn to actually complete it
         if current_step == "finish":
-            # One extra turn to run `devflow done` on finish
-            result = _run_kimi(kimi_executable, E2E_PROJECT_DIR, continuation_prompt)
+            result = _run_tool(config, executable, invocation, E2E_PROJECT_DIR, continuation_prompt)
             turn_count += 1
-            turn_header = "\n=== FINAL TURN ===\n"
+            turn_header = f"\n=== {tool_id.upper()} FINAL TURN ===\n"
             turn_output = turn_header + result.stdout + "\n=== STDERR ===\n" + result.stderr
             all_outputs.append(turn_output)
             log_path.write_text("\n".join(all_outputs), encoding="utf-8")
@@ -740,7 +774,7 @@ def test_kimi_completes_chatim_with_devflow(kimi_executable: str) -> None:
     else:
         pytest.fail(f"Workflow did not reach 'finish' after {max_turns} turns")
 
-    # Final assertions based on filesystem state
+    # Final assertions
     import toml
 
     state = toml.load(state_path)
@@ -780,19 +814,19 @@ def test_kimi_completes_chatim_with_devflow(kimi_executable: str) -> None:
         env=test_env,
     )
     assert test_result.returncode == 0, (
-        f"Tests failed after Kimi session:\n{test_result.stdout}\n{test_result.stderr}"
+        f"Tests failed after {tool_id} session:\n{test_result.stdout}\n{test_result.stderr}"
     )
 
     combined_output = "\n".join(all_outputs).lower()
     assert "workflow complete" in combined_output, (
-        "Kimi output does not mention 'Workflow complete!' — it may have stopped early"
+        f"{tool_id} output does not mention 'Workflow complete!' — it may have stopped early"
     )
 
-    # Generate comparison report
+    # Generate report
     run_end = time.time()
     artifacts = _list_artifacts(E2E_PROJECT_DIR)
     metrics = _collect_run_metrics(
-        run_start, run_end, turn_count, run_id_actual, state, test_result
+        run_start, run_end, turn_count, run_id_actual, state, test_result, tool_id
     )
     report_path = _generate_report(metrics, artifacts)
     print(f"\n=== E2E REPORT generated: {report_path} ===\n")
