@@ -237,6 +237,40 @@ def _find_available_tools() -> list[tuple[ToolConfig, str, tuple[list[str], dict
 _AVAILABLE_TOOLS = _find_available_tools()
 
 
+# --- Skill installation ---
+
+
+def _get_skill_install_dir(tool_id: str) -> Path | None:
+    """Return the directory where a tool looks for skills."""
+    home = Path.home()
+    if tool_id == "kimi":
+        return home / ".kimi" / "skills"
+    elif tool_id == "claude":
+        return home / ".claude" / "skills"
+    elif tool_id == "opencode":
+        return home / ".opencode" / "skills"
+    return None
+
+
+def _install_devflow_skill(tool_id: str, skill_source: Path) -> Path | None:
+    """Install the devflow skill for a given tool.
+
+    Copies the rendered SKILL.md into the tool's skills directory so the
+    agent can invoke it by name without manual registration.
+    """
+    skills_dir = _get_skill_install_dir(tool_id)
+    if skills_dir is None:
+        return None
+
+    target = skills_dir / "devflow" / "SKILL.md"
+    if target.exists():
+        return target
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(skill_source, target)
+    return target
+
+
 # --- Project setup ---
 
 
@@ -394,26 +428,37 @@ def _setup_project() -> str:
 
     # Read run_id from state after init
     state_path = E2E_PROJECT_DIR / ".devflow" / "state.toml"
+    run_id = ""
     if state_path.exists():
         import toml
 
         state_data = toml.load(state_path)
-        return str(state_data.get("workflow_run_id", ""))
-    return ""
+        run_id = str(state_data.get("workflow_run_id", ""))
+
+    # Install devflow skill for each available tool
+    skill_source = E2E_PROJECT_DIR / "SKILL.md"
+    for config, _, _ in _AVAILABLE_TOOLS:
+        if skill_source.exists():
+            installed = _install_devflow_skill(config.tool_id, skill_source)
+            if installed:
+                print(f"Installed devflow skill for {config.tool_id}: {installed}")
+
+    return run_id
 
 
 def _build_prompt(run_id: str) -> str:
     """Build the prompt for the AI agent.
 
     We intentionally do NOT tell the agent how to use DevFlow.
-    The agent must read SKILL.md and follow the instructions on its own.
+    The agent must invoke the devflow skill and follow its guidance.
     """
     return (
         "You are an AI software engineer. Complete the following project "
         "using the DevFlow v2.0 workflow system.\n\n"
         f"WORK DIRECTORY: {E2E_PROJECT_DIR}\n\n"
-        "Read SKILL.md in the project root and follow its instructions exactly. "
-        "Do NOT write any code or create any files until SKILL.md tells you to.\n\n"
+        "You have the `devflow` skill available. Invoke it and follow its "
+        "instructions exactly. Do NOT write any code or create any files "
+        "until the devflow skill tells you to.\n\n"
         "PROJECT: ChatIM\n"
         "- Backend: Python FastAPI in `src/main.py`\n"
         "- Frontend: `index.html` with Tailwind CSS via CDN (no build tools)\n"
