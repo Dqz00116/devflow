@@ -414,7 +414,24 @@ def _setup_project() -> str:
         '    contacts = client.get("/contacts/u2").json()\n'
         '    assert contacts[0]["unread_count"] == 0\n\n'
         '    msgs = client.get("/messages/u2").json()\n'
-        '    assert msgs[0]["read"] is True\n',
+        '    assert msgs[0]["read"] is True\n\n'
+        'def test_root_serves_frontend():\n'
+        '    response = client.get("/")\n'
+        '    assert response.status_code == 200\n'
+        '    content = response.text.lower()\n'
+        '    assert "<html" in content, "Root must serve an HTML page"\n\n'
+        'def test_frontend_has_required_structure():\n'
+        '    import pathlib\n'
+        '    html_path = pathlib.Path(__file__).resolve().parents[1] / "index.html"\n'
+        '    assert html_path.exists(), "index.html must exist in project root"\n'
+        '    content = html_path.read_text(encoding="utf-8").lower()\n'
+        '    assert "tailwind" in content, "Frontend must use Tailwind CSS"\n'
+        '    sidebar = any(t in content for t in ["sidebar", "contacts", "contact-list", "panel"])\n'
+        '    assert sidebar, "Frontend must have a contacts sidebar"\n'
+        '    chat = any(t in content for t in ["messages", "conversation", "chat"])\n'
+        '    assert chat, "Frontend must have a conversation view"\n'
+        '    poll = any(t in content for t in ["fetch(", "setinterval", "settimeout", "poll", "refresh"])\n'
+        '    assert poll, "Frontend must auto-refresh messages (polling)"\n',
         encoding="utf-8",
     )
 
@@ -483,8 +500,10 @@ def _build_prompt(run_id: str) -> str:
         "- Messages refresh automatically (polling)\n"
         "- All styling uses Tailwind CSS utility classes\n\n"
         "STRICT ACCEPTANCE:\n"
-        "The file `tests/test_app.py` is the SOLE acceptance criteria. "
-        "Read it carefully. Every test must pass. Do NOT modify the tests.\n\n"
+        "Both the backend tests (`tests/test_app.py`) AND the frontend (`index.html`) "
+        "must be fully implemented. Every test in `tests/test_app.py` must pass, AND "
+        "`index.html` must exist with a working two-panel chat UI (contacts sidebar + "
+        "conversation view, auto-polling via JavaScript). Do NOT modify the tests.\n\n"
         f"Do everything inside {E2E_PROJECT_DIR}.\n"
     )
 
@@ -535,7 +554,7 @@ def _run_tool(
         env=env,
         capture_output=True,
         text=True,
-        timeout=600,
+        timeout=900,
     )
 
 
