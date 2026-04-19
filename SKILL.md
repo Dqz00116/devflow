@@ -91,7 +91,7 @@ Fail count persists across visits (resets only when gates pass).
 
 | Workflow | Steps |
 |----------|-------|
-| MODE-A (Feature) | req-create → req-approve → brainstorm → write-plan → implement-tdd → code-review → test-run → verify → finish |
+| MODE-A (Feature) | req-create → req-approve → brainstorm → write-plan → implement-sdd → code-review → test-run → verify → finish |
 | MODE-B (Debug) | debug-root-cause → debug-pattern → debug-hypothesis → debug-fix → debug-question → debug-verify → debug-finish → (auto → MODE-A:write-plan) |
 
 Cross-workflow references use `WORKFLOW-ID:STEP-ID` format.

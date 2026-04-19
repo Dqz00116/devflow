@@ -80,13 +80,13 @@ id = "write-plan"
 name = "Write Implementation Plan"
 prompt_file = "prompts/write-plan.md"
 gates = ["file_exists:docs/superpowers/plans/PLAN-{workflow_run_id}.md"]
-next = "implement-tdd"
+next = "implement-sdd"
 
 # Stage 3: Implementation
 [[steps]]
-id = "implement-tdd"
-name = "Implement with TDD"
-prompt_file = "prompts/implement-tdd.md"
+id = "implement-sdd"
+name = "Implement with SDD"
+prompt_file = "prompts/implement-sdd.md"
 gates = ["command_success:{test_command}"]
 next = "code-review"
 

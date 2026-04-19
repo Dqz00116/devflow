@@ -146,7 +146,7 @@ class TestModeAGateDense:
         (project_root / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id}.md").write_text("D")
         engine.advance()  # -> write-plan
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("P")
-        engine.advance()  # -> implement-tdd
+        engine.advance()  # -> implement-sdd
         engine.advance()  # -> code-review (test passes with echo ok)
 
         # Should fail without approval
@@ -165,7 +165,7 @@ class TestModeAGateDense:
         (project_root / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id}.md").write_text("D")
         engine.advance()  # -> write-plan
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("P")
-        engine.advance()  # -> implement-tdd
+        engine.advance()  # -> implement-sdd
         engine.advance()  # -> code-review
 
         engine.state.set("approved_items", [f"CODE-REVIEW-{run_id}"])
@@ -186,7 +186,7 @@ class TestModeAGateDense:
         (project_root / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id}.md").write_text("D")
         engine.advance()  # -> write-plan
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("P")
-        engine.advance()  # -> implement-tdd
+        engine.advance()  # -> implement-sdd
         engine.advance()  # -> code-review
         engine.state.set("approved_items", [f"CODE-REVIEW-{run_id}"])
         engine.advance()  # -> test-run
@@ -420,7 +420,7 @@ class TestCrossWorkflowTransition:
         success, next_step, msg = engine.advance()
         assert success
         assert next_step is not None
-        assert next_step.id == "implement-tdd"
+        assert next_step.id == "implement-sdd"
 
 
 # ---------------------------------------------------------------------------

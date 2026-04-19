@@ -189,7 +189,7 @@ On transition:
 2. **req-approve** - Get user approval + create FEAT document
 3. **brainstorm** - Explore design options
 4. **write-plan** - Decompose into tasks
-5. **implement-tdd** - TDD implementation
+5. **implement-sdd** - TDD implementation
 6. **code-review** - Review changes (requires `user_approved`)
 7. **test-run** - Run all tests
 8. **verify** - Collect evidence
@@ -222,7 +222,7 @@ debug-finish complete     → MODE-A:write-plan (full review cycle)
 │   └── MODE-B.toml          # Debug workflow
 ├── prompts/
 │   ├── brainstorm.md        # Reusable prompts
-│   ├── implement-tdd.md
+│   ├── implement-sdd.md
 │   └── ...
 ├── config.toml              # Project config
 └── state.toml               # Current workflow & step (gitignored)

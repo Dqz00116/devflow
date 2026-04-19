@@ -296,9 +296,9 @@ def _setup_project() -> str:
         'name = "E2E Feature Development"\n'
         'extends = ["MODE-A"]\n\n'
         '[[steps]]\n'
-        'id = "implement-tdd"\n'
-        'name = "Implement with TDD"\n'
-        'prompt_file = "prompts/implement-tdd.md"\n'
+        'id = "implement-sdd"\n'
+        'name = "Implement with SDD"\n'
+        'prompt_file = "prompts/implement-sdd.md"\n'
         'gates = ["command_success:{test_command}"]\n'
         'next = "code-review"\n'
         "[[steps.fail_route]]\n"

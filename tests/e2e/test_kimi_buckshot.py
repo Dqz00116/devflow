@@ -302,9 +302,9 @@ def _setup_project() -> str:
         'name = "E2E Feature Development"\n'
         'extends = ["MODE-A"]\n\n'
         '[[steps]]\n'
-        'id = "implement-tdd"\n'
-        'name = "Implement with TDD"\n'
-        'prompt_file = "prompts/implement-tdd.md"\n'
+        'id = "implement-sdd"\n'
+        'name = "Implement with SDD"\n'
+        'prompt_file = "prompts/implement-sdd.md"\n'
         'gates = ["command_success:{test_command}"]\n'
         'next = "code-review"\n'
         "[[steps.fail_route]]\n"
@@ -513,7 +513,7 @@ def _build_prompt(run_id: str) -> str:
         f"`docs/features/FEAT-{run_id}.md`\n"
         f"- brainstorm: needs `docs/superpowers/specs/DESIGN-{run_id}.md`\n"
         f"- write-plan: needs `docs/superpowers/plans/PLAN-{run_id}.md`\n"
-        "- implement-tdd: `pytest tests/test_app.py -v` must pass\n"
+        "- implement-sdd: `pytest tests/test_app.py -v` must pass\n"
         f"- code-review: run `devflow approve CODE-REVIEW-{run_id}` then done\n"
         "- test-run: tests must pass\n"
         f"- verify: needs `docs/evidence/EVIDENCE-{run_id}.md`\n"
@@ -526,7 +526,7 @@ def _build_prompt(run_id: str) -> str:
         "   b. Do the step\n"
         "   c. `devflow done`\n"
         "   d. Fix any gate failures and repeat c\n"
-        "3. When you reach `implement-tdd`, write the FastAPI game backend "
+        "3. When you reach `implement-sdd`, write the FastAPI game backend "
         "and Three.js frontend, then run tests until they pass.\n"
         f"4. For `code-review`, self-approve with "
         f"`devflow approve CODE-REVIEW-{run_id}`.\n"

@@ -265,9 +265,9 @@ class LoopEngine:
       "metadata": { "run_id": "abc123" }
     },
     {
-      "id": "implement-tdd",
+      "id": "implement-sdd",
       "workflow_id": "MODE-A",
-      "step_id": "implement-tdd",
+      "step_id": "implement-sdd",
       "title": "TDD Implementation",
       "passes": false,
       "checkpoint_id": null,
@@ -289,7 +289,7 @@ The backlog can be **auto-generated** from an existing workflow TOML (one task p
 `.devflow/progress.md` append-only format:
 
 ```markdown
-## 2025-04-16 10:23 — implement-tdd
+## 2025-04-16 10:23 — implement-sdd
 - Pattern: use pytest parametrize to reduce duplication
 - Gotcha: when updating `config.py`, remember to sync `tests/test_config.py` fixtures
 - Checkpoint: abc1234
