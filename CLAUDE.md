@@ -18,6 +18,23 @@ DevFlow v2.0 is a Python CLI tool for AI-assisted software development using TOM
 - **Run CLI**: `python -m devflow` or `devflow`
 - **Validate project**: `devflow validate` (checks `.devflow/workflows/`, `SKILL.md`, and configured test command)
 
+## Release to PyPI
+
+Always use the release script to avoid uploading stale artifacts:
+
+```bash
+# Preview
+uv run python scripts/release.py --dry-run patch
+
+# Execute (bumps version, cleans dist, builds, verifies, commits, tags, pushes, uploads)
+uv run python scripts/release.py patch   # or minor / major
+```
+
+The script guards against:
+- Stale files in `dist/` (cleans before build)
+- Version mismatches (verifies dist filenames match pyproject.toml)
+- Unclean git state (warns + prompts for confirmation)
+
 > **Note:** `command_success` gates require `DEVFLOW_ALLOW_SHELL=1` to execute. Tests that exercise shell gates already set this (see `tests/test_workflow_engine.py`).
 
 ## Architecture
