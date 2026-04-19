@@ -49,6 +49,7 @@ tests/e2e/taskflow_e2e/
 tests/e2e/taskflow_e2e_backup/
 tests/e2e/buckshot_e2e/
 tests/e2e/buckshot_e2e_backup/
+tests/e2e/taskflow_e2e_v2/
 
 # E2E test reports (generated locally, not version controlled)
 tests/e2e/reports/
