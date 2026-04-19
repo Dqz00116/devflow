@@ -25,7 +25,7 @@ devflow --help          # Verify CLI is installed
 If `devflow` is not found, install first:
 
 ```bash
-pip install devflow     # From PyPI
+pip install agent-devflow     # From PyPI
 ```
 
 Or from source if you have the repo:
