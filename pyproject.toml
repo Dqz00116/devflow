@@ -45,9 +45,9 @@ dev = [
 devflow = "devflow.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/devflow/devflow"
-Documentation = "https://github.com/devflow/devflow#readme"
-Repository = "https://github.com/devflow/devflow"
+Homepage = "https://github.com/Dqz00116/devflow"
+Documentation = "https://github.com/Dqz00116/devflow#readme"
+Repository = "https://github.com/Dqz00116/devflow"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/devflow"]
