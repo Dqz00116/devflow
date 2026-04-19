@@ -369,7 +369,7 @@ def validate(ctx: click.Context) -> None:
     # Check v2 required structure
     project_root = config_path.parent.parent
     workflows_dir = project_root / ".devflow" / "workflows"
-    agents_file = project_root / "AGENTS.md"
+    skill_file = project_root / "SKILL.md"
 
     all_valid = True
 
@@ -385,11 +385,11 @@ def validate(ctx: click.Context) -> None:
         console.print("[red]✗[/red] .devflow/workflows/ directory missing")
         all_valid = False
 
-    # Check AGENTS.md
-    if agents_file.exists():
-        console.print("[green]✓[/green] AGENTS.md")
+    # Check SKILL.md
+    if skill_file.exists():
+        console.print("[green]✓[/green] SKILL.md")
     else:
-        console.print("[yellow]✗[/yellow] AGENTS.md (missing, recommended)")
+        console.print("[yellow]✗[/yellow] SKILL.md (missing, recommended)")
         # Not critical for v2
 
     # Check config has test command

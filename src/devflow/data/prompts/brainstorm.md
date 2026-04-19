@@ -9,7 +9,7 @@ docs/superpowers/specs/DESIGN-{workflow_run_id}.md
 1. Read `brainstorming` skill
 
 2. Research context:
-   - Read AGENTS.md
+   - Read SKILL.md
    - Explore existing codebase
    - Check similar implementations
 

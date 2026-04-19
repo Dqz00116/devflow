@@ -12,14 +12,7 @@ from devflow.config import DevFlowConfig
 
 def get_template_dir() -> Path:
     """Get the directory containing templates."""
-    # When installed as package
-    try:
-        import devflow.skills.devflow.templates as templates_pkg
-
-        return Path(templates_pkg.__file__).parent
-    except ImportError:
-        # During development
-        return Path(__file__).parent / "skills" / "devflow" / "templates"
+    return Path(__file__).parent / "templates"
 
 
 def get_template_env() -> Environment:
@@ -65,9 +58,9 @@ def copy_template(
     dest_path.write_text(content, encoding="utf-8")
 
 
-# v2 templates - only AGENTS.md needs Jinja2 rendering
+# v2 templates - only SKILL.md needs Jinja2 rendering
 PROJECT_TEMPLATES: dict[str, Path] = {
-    "AGENTS.md": Path("AGENTS.md"),
+    "SKILL.md": Path("SKILL.md"),
 }
 
 

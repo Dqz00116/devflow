@@ -106,7 +106,7 @@ def init_project(
             console.print(f"  [green]✓[/green] {file_path.relative_to(project_root)}")
 
     console.print("\n[bold]Next steps:[/bold]")
-    console.print("  1. Review and customize AGENTS.md")
+    console.print("  1. Read SKILL.md for the DevFlow workflow guide")
     console.print("  2. List available workflows: [bold]devflow list-workflows[/bold]")
     console.print("  3. Select a workflow: [bold]devflow select-workflow MODE-A[/bold]")
     console.print("  4. Follow the step: [bold]devflow current[/bold]")
