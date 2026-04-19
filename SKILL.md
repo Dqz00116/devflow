@@ -1,380 +1,167 @@
 ---
 name: devflow
-description: DevFlow v2.0 - Universal AI Agent Development Workflow CLI. Use when starting AI-assisted development with progressive disclosure workflow.
+description: Use when starting work inside a DevFlow project (look for .devflow/ directory or devflow CLI) and need to follow a step-by-step workflow with gate-based verification. Use when a project uses MODE-A, MODE-B, or custom TOML workflows for feature development or debugging.
 ---
 
-# DevFlow v2.0
+# DevFlow
 
-DevFlow is a universal AI-assisted development workflow system using TOML-based progressive disclosure.
+DevFlow is a CLI-driven progressive disclosure workflow. You advance one verified step at a time.
 
-## What You Get
+## When to Use
 
-- **Progressive Disclosure** - One step at a time via CLI
-- **TOML Workflow Definition** - Configure in `.devflow/workflows/*.toml`
-- **Gate System** - Objective verification before advancement
-- **Fail Routes** - Automatic routing on gate failure with escalation thresholds
-- **Cross-Workflow References** - Seamless transitions between workflows
-- **Workflow Inheritance** - Extend and customize existing workflows
-- **Config Variables** - Reference `{test_command}`, `{lint_command}` etc. from config
-- **CLI Tool** - Manage workflow state and progression
-- **Ralph Loop** - Autonomous execution via `devflow run`
+- Project has `.devflow/workflows/*.toml` files
+- You see `devflow` commands in project docs
+- Task requires writing requirements, design docs, or code in stages
+- You need gate-based verification (tests must pass before advancing)
+
+**When NOT to use:** Project has no `.devflow/` directory — this is a standard project, use normal development.
 
 ## Quick Start
 
-### 1. Install DevFlow
+```bash
+devflow --help          # Verify CLI is installed
+```
+
+If `devflow` is not found, install first:
 
 ```bash
-git clone <repository-url>
-cd devflow
+pip install agent-devflow     # From PyPI
+```
+
+Or from source if you have the repo:
+
+```bash
 pip install -e .
 ```
 
-### 2. Initialize Project (Skip if `.devflow/` already exists)
-
-> **Agent rule: If `.devflow/` already exists in the current project, do NOT run `init`. Use the existing workflows directly.**
->
-> **`devflow init` uses the DevFlow repository's own `.devflow/` as the template for workflows and prompts.**
+Then start the workflow:
 
 ```bash
-# Only run this if .devflow/ is NOT present
-devflow init --language python --name "My Project"
+devflow list-workflows              # See available workflows
+devflow select-workflow MODE-A      # Pick one
+devflow current                     # Read current step
 ```
 
-### 3. Start Development
-
-```bash
-# List available workflows
-devflow list-workflows
-
-# Select a workflow
-devflow select-workflow MODE-A
-
-# Follow the displayed instruction
-devflow current
-
-# When done, mark complete and advance
-devflow done
-
-# Repeat until workflow complete
-```
-
-## How DevFlow Works
-
-### Progressive Disclosure
-
-Instead of reading a full workflow document, DevFlow reveals **one step at a time**:
+## Core Loop (ALWAYS follow this)
 
 ```
-┌─────────────────────────────────────────┐
-│ 1. Agent: devflow current               │
-│    CLI: Show current step instruction   │
-│                                         │
-│ 2. Agent: Execute the instruction       │
-│                                         │
-│ 3. Agent: devflow done                  │
-│    CLI: Check gates → Advance or route  │
-└─────────────────────────────────────────┘
+1. devflow current     → Read what to do
+2. Execute the step    → Write code, create docs, run tests
+3. devflow done        → Check gates → advance or retry
+4. Repeat until "Workflow complete!"
 ```
 
-**Core rule: Only advance workflow through `devflow done`. Do NOT skip steps.**
+**Core rule: Only advance through `devflow done`. Never skip steps. Never create files for future steps.**
 
-### Gate System
+## Commands
 
-Each step has gate conditions that must be satisfied before advancing:
+| Command | Purpose |
+|---------|---------|
+| `devflow current` | Show current step instruction |
+| `devflow done` | Check gates and advance |
+| `devflow back` | Go back one step |
+| `devflow approve ITEM` | Mark item as user-approved |
+| `devflow set KEY VALUE` | Set state variable |
+| `devflow list-workflows` | List available workflows |
+| `devflow select-workflow ID` | Select and start a workflow |
+| `devflow run` | Start autonomous Ralph Loop |
 
-- `file_exists:docs/REQ-{workflow_run_id}.md` - Document created
-- `file_contains:docs/REQ-{workflow_run_id}.md:status: approved` - Content verified
-- `user_approved:DESIGN-001` - User confirmation (via `devflow approve DESIGN-001`)
-- `command_success:{test_command}` - Tests pass (config-resolved)
+## Gate Types
 
-### Fail Routes
+Gates block advancement until satisfied:
 
-When gates fail, steps can define **fail routes** — automatic routing to a different step based on failure count. This implements branching without requiring agent decisions.
+- `file_exists:path` — File must exist
+- `file_contains:path:content` — File must contain text
+- `command_success:{test_command}` — Command exits 0
+- `user_approved:ITEM` — Requires `devflow approve ITEM`
+- `state_set:var` — State variable must be set
 
-```toml
-[[steps]]
-id = "debug-fix"
-gates = ["command_success:{test_command}"]
-next = "debug-verify"
+## Fail Routes
 
-[[steps.fail_route]]
-min_fails = 1
-max_fails = 2
-target = "debug-root-cause"    # Fails 1-2 times → re-investigate
+When gates fail, the workflow may route based on failure count:
 
-[[steps.fail_route]]
-min_fails = 3
-target = "debug-question"      # Fails 3+ times → escalate to human
+```
+fails 1-2 → retry or fallback step
+fails 3+  → escalate to human
 ```
 
-**Rules:**
-- `min_fails`: Required, integer >= 1
-- `max_fails`: Optional, integer >= min_fails (defaults to infinity)
-- `target`: Required, step ID or cross-workflow reference (`WORKFLOW:STEP`)
-- Routes match in declaration order; first match wins
-- No matching route = stay and retry (existing behavior)
-- Fail count **persists** across visits (only resets when gates pass)
-- This enables escalation: fail 1-2 → retry, fail 3+ → escalate
+Fail count persists across visits (resets only when gates pass).
 
-### Cross-Workflow References
+## Built-in Workflows
 
-Steps can reference steps in other workflows using `WORKFLOW-ID:STEP-ID` format:
+| Workflow | Steps |
+|----------|-------|
+| MODE-A (Feature) | req-create → req-approve → brainstorm → write-plan → implement-tdd → code-review → test-run → verify → finish |
+| MODE-B (Debug) | debug-root-cause → debug-pattern → debug-hypothesis → debug-fix → debug-question → debug-verify → debug-finish → (auto → MODE-A:write-plan) |
 
-```toml
-[[steps]]
-id = "debug-finish"
-next = "MODE-A:write-plan"    # After debug, enter MODE-A at write-plan
-```
+Cross-workflow references use `WORKFLOW-ID:STEP-ID` format.
 
-On cross-workflow transition:
-- Target workflow is loaded automatically
-- `current_workflow` switches to the target
-- `workflow_run_id` is preserved for file naming continuity
+## Common Mistakes
 
-### Workflow Configuration
-
-Workflows are defined in TOML format:
-
-```toml
-# .devflow/workflows/my-workflow.toml
-[workflow]
-id = "MY-WORKFLOW"
-name = "My Custom Workflow"
-description = "Description of this workflow"
-extends = ["MODE-A"]  # Optional: inherit from existing
-
-[[steps]]
-id = "req-create"
-name = "Create Requirement"
-prompt = """
-## Getting Started
-
-Your instruction here...
-"""
-gates = ["file_exists:docs/requirements/REQ-{workflow_run_id}.md"]
-next = "next-step"
-
-[[steps]]
-id = "complex-step"
-name = "Complex Step"
-prompt_file = "prompts/complex.md"  # Reference external file
-gates = ["command_success:{test_command}"]
-next = ""  # Empty = workflow complete
-
-[[steps.fail_route]]
-min_fails = 1
-target = "fallback-step"      # On failure, route to fallback
-```
-
-### Config Variables
-
-Reference project commands from `.devflow/config.toml` in gates and prompts:
-
-- `{test_command}` - Test command (e.g., `pytest`, `go test ./...`)
-- `{test_unit_command}` - Unit test command
-- `{test_integration_command}` - Integration test command
-- `{lint_command}` - Lint command
-- `{build_command}` - Build command
-- `{workflow_run_id}` - Current workflow run ID (auto-generated)
-
-## CLI Commands
-
-### Workflow Commands (Primary - Use These)
-
-```bash
-devflow list-workflows              # List all available workflows
-devflow select-workflow <id>        # Select and start a workflow
-devflow current                     # Get current step instruction
-devflow done                        # Check gates and advance (or route on failure)
-devflow back                        # Go back to previous step
-devflow workflow-status             # Show workflow status
-devflow approve <item>              # Mark item as user-approved
-devflow set <key> <value>           # Set a state variable
-
-# Ralph Loop — Autonomous Execution
-devflow run [--tool local] [--max-iterations 10]   # Start autonomous loop
-devflow loop-status                                  # Show loop status and remaining tasks
-devflow sync-backlog                                 # Generate backlog from current workflow
-devflow loop-reset                                   # Reset loop progress (preserves history)
-```
-
-### Legacy Commands (Not for AI agents)
-
-```bash
-devflow init                        # Initialize project
-devflow req new REQ-001             # Create requirement
-devflow feat new FEAT-001           # Create feature
-devflow task new                    # Create task
-devflow status                      # Project status
-devflow validate                    # Check compliance
-```
-
-## Example Workflows
-
-DevFlow includes two example workflows that you can use directly or extend:
-
-### MODE-A: Feature Development
-
-For building new features, enhancements, or new modules.
-
-**Steps:**
-1. **req-create** → Create requirement document
-2. **req-approve** → Get user approval + create FEAT document
-3. **brainstorm** → Explore design options
-4. **write-plan** → Decompose into tasks
-5. **implement-tdd** → TDD implementation
-6. **code-review** → Review changes (requires `user_approved`)
-7. **test-run** → Run all tests
-8. **verify** → Collect evidence
-9. **finish** → Deliver and cleanup (requires REQ status: done)
-
-**Use when:** Building new features, enhancing existing functionality
-
-### MODE-B: Debug
-
-For systematic debugging of bugs, errors, and unexpected behavior.
-
-**Steps:**
-1. **debug-root-cause** → Investigate root cause
-2. **debug-pattern** → Pattern analysis
-3. **debug-hypothesis** → Form and test hypothesis (on fail → back to root-cause)
-4. **debug-fix** → Implement fix (fails 1-2x → root-cause; fails 3x → escalate)
-5. **debug-question** → Question architecture (requires `user_approved`, then → root-cause)
-6. **debug-verify** → Verify fix
-7. **debug-finish** → Complete debug → **auto-transitions to MODE-A:write-plan**
-
-**Use when:** Debugging bugs, fixing errors, test failures
-
-**Fail route escalation:**
-```
-debug-fix fails 1-2 times → debug-root-cause (re-investigate)
-debug-fix fails 3+ times  → debug-question (escalate to human)
-debug-question approved   → debug-root-cause (try again with guidance)
-debug-finish complete     → MODE-A:write-plan (full review cycle)
-```
-
-### Creating Custom Workflows
-
-Create your own workflow by adding a TOML file:
-
-```toml
-# .devflow/workflows/CUSTOM.toml
-[workflow]
-id = "CUSTOM"
-name = "Custom Workflow"
-description = "My custom development process"
-
-[[steps]]
-id = "step1"
-name = "Step One"
-prompt = "Instructions for step 1"
-gates = []
-next = "step2"
-
-[[steps]]
-id = "step2"
-name = "Step Two"
-prompt_file = "prompts/step2.md"
-gates = ["command_success:{test_command}"]
-next = ""
-
-[[steps.fail_route]]
-min_fails = 2
-target = "OTHER-WORKFLOW:fallback-step"  # Cross-workflow fail route
-```
-
-### Extending Existing Workflows
-
-```toml
-# .devflow/workflows/MY-MODE-A.toml
-[workflow]
-id = "MY-MODE-A"
-name = "My Feature Workflow"
-extends = ["MODE-A"]  # Inherit all MODE-A steps
-
-# Override a step
-[[steps]]
-id = "req-create"
-name = "Custom Requirement"
-prompt = "My custom requirement instructions"
-next = "req-approve"
-
-# Add new step
-[[steps]]
-id = "custom-step"
-name = "Custom Step"
-prompt = "Additional step"
-gates = []
-next = "brainstorm"
-```
+| Mistake | Fix |
+|---------|-----|
+| Writing code before `devflow current` | Stop. Run `devflow current` first |
+| Creating files for future steps | Only create what the current step asks for |
+| Skipping `devflow done` | All advancement must go through `devflow done` |
+| Ignoring gate failures | Fix the issue, then `devflow done` again |
 
 ## 5 Iron Laws
 
-| # | Law | Status | If Violated |
-|---|-----|--------|-------------|
-| 1 | Read `using-superpowers` first | Rigid | Stop, read skill |
-| 2 | TDD: Test before code | Rigid | Delete code, restart |
-| 3 | Verify before claim | Rigid | Run test → Read → Claim |
-| 4 | Root cause before fix | Strong | Ask human after 3 fails |
-| 5 | Debug → Repeat full cycle | Strong | Complete plan→test before commit |
+| # | Law | Severity |
+|---|-----|----------|
+| 1 | Read `using-superpowers` skill first | Rigid |
+| 2 | TDD: Test before code | Rigid |
+| 3 | Verify before claim | Rigid |
+| 4 | Root cause before fix | Strong |
+| 5 | Debug → Repeat full cycle | Strong |
 
-## Document Structure
+## Project Context
+
+**Language**: {{ project.language }}
+**Stack**: {{ project.stack }}
+**Version**: {{ project.version }}
+
+## Constraints
+
+{% if constraints.zero_warnings %}- **ZERO warnings** — All builds must have zero warnings{% endif %}
+{% if constraints.zero_mocks %}- **ZERO mocks** — Use real instances only in tests{% endif %}
+{% if constraints.nullable %}- **Nullable enabled** — Use nullable reference types{% endif %}
+
+## Project Structure
 
 ```
-project/
-├── .devflow/
-│   ├── workflows/           # Workflow definitions (TOML)
-│   │   ├── MODE-A.toml      # Feature development
-│   │   ├── MODE-B.toml      # Debug workflow
-│   │   └── CUSTOM.toml      # Your custom workflows
-│   ├── prompts/             # Reusable prompt files
-│   ├── config.toml          # Project config
-│   └── state.toml           # Current state (auto-managed, gitignored)
-├── docs/
-│   ├── requirements/        # REQ files
-│   ├── features/            # FEAT files (technical implementation docs)
-│   ├── superpowers/specs/   # Design docs
-│   ├── superpowers/plans/   # Implementation plans
-│   ├── evidence/            # Verification evidence
-│   ├── debug/               # Debug analysis
-│   └── completion/          # Workflow completion summaries
-└── AGENTS.md                # Project context
+{{ project.name }}/
+├── .devflow/              # DevFlow configuration
+│   ├── workflows/         # Workflow definitions (TOML)
+│   ├── prompts/           # Reusable prompt files
+│   ├── config.toml        # Project config
+│   └── state.toml         # Current state (gitignored)
+├── {{ paths.src }}/       # Source code
+├── {{ paths.tests }}/     # Tests
+├── {{ paths.docs }}/      # Documentation
+│   ├── requirements/      # REQ files
+│   ├── features/          # FEAT files
+│   ├── superpowers/specs/ # Design docs
+│   ├── superpowers/plans/ # Implementation plans
+│   ├── evidence/          # Verification evidence
+│   ├── debug/             # Debug analysis
+│   └── completion/        # Workflow completion summaries
+└── SKILL.md               # This file
 ```
 
-## Skills Reference
+## Commands Reference
 
-These are external skills you should read when instructed:
+```bash
+# Build
+{{ commands.build }}
 
-| Skill | Type | When |
-|-------|------|------|
-| using-superpowers | Rigid | **ALWAYS FIRST** |
-| brainstorming | Flexible | New features |
-| systematic-debugging | Rigid | Bugs/issues |
-| writing-plans | Flexible | After brainstorm |
-| test-driven-development | Rigid | Implementation |
-| subagent-driven-development | Flexible | Plan execution |
-| requesting-code-review | Flexible | After implementation |
-| verification-before-completion | Rigid | Before claiming done |
-| finishing-a-development-branch | Flexible | Ready to merge |
+# Test
+{{ commands.test }}
+{{ commands.test_unit }}
+{{ commands.test_integration }}
 
-## Configuration
-
-Project configuration in `.devflow/config.toml`:
-
-```toml
-[project]
-name = "my-project"
-language = "python"
-stack = "Python 3.11 + FastAPI"
-
-[commands]
-test = "pytest"
-test_unit = "pytest tests/unit -v"
-test_integration = "pytest tests/integration -v"
-lint = "ruff check ."
-build = "python -m build"
+# Lint
+{{ commands.lint }}
 ```
 
----
-
-*DevFlow v2.0 - Progressive Disclosure Workflow*
+*Generated by DevFlow v2.0*

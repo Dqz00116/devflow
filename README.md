@@ -23,7 +23,13 @@ DevFlow v2.0 is a development workflow tool designed for AI-assisted software de
 ## Installation
 
 ```bash
-git clone <repository-url>
+pip install agent-devflow
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/Dqz00116/devflow
 cd devflow
 pip install -e .
 ```

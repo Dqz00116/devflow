@@ -9,13 +9,14 @@ DevFlow v2.0 is a Python CLI tool for AI-assisted software development using TOM
 ## Common Commands
 
 - **Install locally**: `pip install -e .`
+- **Install from PyPI**: `pip install agent-devflow`
 - **Run tests**: `pytest` (or `pytest tests/test_<module>.py` for a single file)
 - **Run a single test**: `pytest tests/test_<module>.py::TestClass::test_method -v`
 - **Lint**: `ruff check .`
 - **Format**: `black .` (line length is 100 per `pyproject.toml`)
 - **Type check**: `mypy src/devflow`
-- **Run CLI**: `python -m devflow` or `devflow` (after `pip install -e .`)
-- **Validate project**: `devflow validate` (checks `.devflow/workflows/`, `AGENTS.md`, and configured test command)
+- **Run CLI**: `python -m devflow` or `devflow`
+- **Validate project**: `devflow validate` (checks `.devflow/workflows/`, `SKILL.md`, and configured test command)
 
 > **Note:** `command_success` gates require `DEVFLOW_ALLOW_SHELL=1` to execute. Tests that exercise shell gates already set this (see `tests/test_workflow_engine.py`).
 
@@ -55,7 +56,7 @@ DevFlow v2.0 is a Python CLI tool for AI-assisted software development using TOM
 
 - **Config variables** (`{test_command}`, `{lint_command}`, `{build_command}`, `{workflow_run_id}`, etc.) are injected into state by `_inject_config_variables()` before gate/prompt resolution.
 
-- **`devflow init`** creates `.devflow/`, docs directories, and renders `AGENTS.md` from Jinja2 templates in `skills/devflow/templates/`. Workflow and prompt files are copied from the DevFlow repository's own `.devflow/` when running from source; when installed as a package, it falls back to bundled files in `src/devflow/data/`.
+- **`devflow init`** creates `.devflow/`, docs directories, and renders `SKILL.md` from Jinja2 templates in `src/devflow/templates/`. Workflow and prompt files are copied from the DevFlow repository's own `.devflow/` when running from source; when installed as a package, it falls back to bundled files in `src/devflow/data/`.
 
 ### Testing Conventions
 
