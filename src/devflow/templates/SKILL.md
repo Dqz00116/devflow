@@ -25,9 +25,13 @@ devflow --help          # Verify CLI is installed
 If `devflow` is not found, install first:
 
 ```bash
-pip install -e .        # From source (inside devflow repo)
-# OR
 pip install devflow     # From PyPI
+```
+
+Or from source if you have the repo:
+
+```bash
+pip install -e .
 ```
 
 Then start the workflow:
