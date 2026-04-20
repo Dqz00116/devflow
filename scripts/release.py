@@ -28,6 +28,26 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 DIST_DIR = PROJECT_ROOT / "dist"
 
+# Files that must stay in sync with pyproject.toml version
+VERSION_SOURCES: list[tuple[Path, str, str]] = [
+    # (path, read_pattern, replace_pattern)
+    (
+        PYPROJECT,
+        r'^version\s*=\s*"([^"]+)"',
+        r'^(version\s*=\s*")([^"]+)(")',
+    ),
+    (
+        PROJECT_ROOT / "src" / "devflow" / "__init__.py",
+        r'^__version__\s*=\s*"([^"]+)"',
+        r'^(__version__\s*=\s*")([^"]+)(")',
+    ),
+    (
+        PROJECT_ROOT / "src" / "devflow" / "config.py",
+        r'^(\s+)version:\s*str\s*=\s*"([^"]+)"',
+        r'^(\s+version:\s*str\s*=\s*")([^"]+)(")',
+    ),
+]
+
 
 def run(cmd: list[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
     """Run a shell command and return the result."""
@@ -47,6 +67,24 @@ def get_current_version() -> str:
     if not match:
         raise RuntimeError("Could not find version in pyproject.toml")
     return match.group(1)
+
+
+def get_all_versions() -> dict[Path, str]:
+    """Read version from all tracked source files."""
+    versions: dict[Path, str] = {}
+    for path, read_re, _ in VERSION_SOURCES:
+        text = path.read_text(encoding="utf-8")
+        match = re.search(read_re, text, re.MULTILINE)
+        if not match:
+            raise RuntimeError(f"Could not find version in {path}")
+        versions[path] = match.group(match.lastindex)
+    return versions
+
+
+def check_version_consistency(expected: str) -> dict[Path, str]:
+    """Return files whose version does not match *expected*."""
+    versions = get_all_versions()
+    return {path: v for path, v in versions.items() if v != expected}
 
 
 def bump_version(current: str, level: str) -> str:
@@ -69,18 +107,20 @@ def bump_version(current: str, level: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
-def set_version(new_version: str) -> None:
-    """Write new version to pyproject.toml."""
-    text = PYPROJECT.read_text(encoding="utf-8")
-    new_text = re.sub(
-        r'^(version\s*=\s*")([^"]+)(")',
-        rf'\g<1>{new_version}\g<3>',
-        text,
-        flags=re.MULTILINE,
-    )
-    if new_text == text:
-        raise RuntimeError("Version replacement failed — file unchanged")
-    PYPROJECT.write_text(new_text, encoding="utf-8")
+def set_all_versions(new_version: str) -> None:
+    """Write new version to all tracked source files."""
+    for path, _, replace_re in VERSION_SOURCES:
+        text = path.read_text(encoding="utf-8")
+        new_text = re.sub(
+            replace_re,
+            rf'\g<1>{new_version}\g<3>',
+            text,
+            flags=re.MULTILINE,
+        )
+        if new_text == text:
+            raise RuntimeError(f"Version replacement failed in {path} — file unchanged")
+        path.write_text(new_text, encoding="utf-8")
+    print(f"  Updated version to {new_version} in {len(VERSION_SOURCES)} file(s).")
 
 
 def clean_dist() -> None:
@@ -133,8 +173,9 @@ def check_git_clean() -> bool:
 
 
 def git_commit_version(version: str) -> None:
-    """Stage pyproject.toml and create version bump commit."""
-    run(["git", "add", "pyproject.toml"])
+    """Stage all version files and create version bump commit."""
+    paths = [str(p.relative_to(PROJECT_ROOT)) for p, _, _ in VERSION_SOURCES]
+    run(["git", "add", *paths])
     run(["git", "commit", "-m", f"chore: bump version to {version}"])
     print(f"  Committed version bump.")
 
@@ -194,10 +235,30 @@ def main() -> int:
 
     # 1. Detect current version
     current = get_current_version()
-    new_version = bump_version(current, args.level)
-    print(f"\n1. Version: {current} -> {new_version}")
+    print(f"\n1. Current version: {current}")
 
-    # 2. Check git status
+    # 2. Check version consistency across source files
+    print("\n2. Checking version consistency...")
+    mismatches = check_version_consistency(current)
+    if mismatches:
+        print("  WARNING: Version mismatch detected:")
+        for path, v in sorted(mismatches.items(), key=lambda x: str(x[0])):
+            rel = path.relative_to(PROJECT_ROOT)
+            print(f"    {rel}: {v} (expected {current})")
+        if not args.dry_run:
+            response = input("  Versions are inconsistent. Continue anyway? [y/N] ")
+            if response.lower() not in ("y", "yes"):
+                print("  Aborted.")
+                return 1
+        else:
+            print("  [DRY RUN] Would abort or prompt for inconsistent versions.")
+    else:
+        print("  All source files are consistent.")
+
+    new_version = bump_version(current, args.level)
+    print(f"\n3. Version bump: {current} -> {new_version}")
+
+    # 4. Check git status
     is_clean = check_git_clean()
     if not is_clean:
         print("\n  WARNING: Working tree has uncommitted changes.")
@@ -212,38 +273,38 @@ def main() -> int:
         print("\n  [DRY RUN] No changes made.")
         return 0
 
-    # 3. Clean dist
-    print("\n2. Cleaning dist/...")
+    # 5. Clean dist
+    print("\n4. Cleaning dist/...")
     clean_dist()
 
-    # 4. Bump version
-    print("\n3. Bumping version...")
-    set_version(new_version)
+    # 6. Bump version in all source files
+    print("\n5. Bumping version...")
+    set_all_versions(new_version)
 
-    # 5. Build
-    print("\n4. Building...")
+    # 7. Build
+    print("\n6. Building...")
     artifacts = build()
 
-    # 6. Verify artifacts
-    print("\n5. Verifying artifacts...")
+    # 8. Verify artifacts
+    print("\n7. Verifying artifacts...")
     verify_artifacts(new_version, artifacts)
 
-    # 7. Git commit
+    # 9. Git commit
     if not args.no_git:
-        print("\n6. Committing version bump...")
+        print("\n8. Committing version bump...")
         git_commit_version(new_version)
 
         if not args.no_tag:
-            print("\n7. Creating git tag...")
+            print("\n9. Creating git tag...")
             git_tag(new_version)
 
-        print("\n8. Pushing to origin...")
+        print("\n10. Pushing to origin...")
         git_push(with_tags=not args.no_tag)
     else:
-        print("\n6. Skipping git operations (--no-git).")
+        print("\n8. Skipping git operations (--no-git).")
 
-    # 8. Publish
-    print("\n9. Publishing to PyPI...")
+    # 12. Publish
+    print("\n11. Publishing to PyPI...")
     publish()
 
     print("\n" + "=" * 50)
