@@ -64,6 +64,8 @@ def init_project(
     config.project.stack = default_stacks.get(language, "Custom Stack")
 
     # Create directories (v2 structure)
+    # Note: src/ and tests/ are NOT created here — the workflow agent
+    # creates them when actually needed during implementation steps.
     dirs_to_create = [
         devflow_dir,
         devflow_dir / "workflows",
@@ -75,8 +77,6 @@ def init_project(
         project_root / config.paths.docs / "evidence",
         project_root / config.paths.docs / "debug",
         project_root / config.paths.docs / "completion",
-        project_root / config.paths.src,
-        project_root / config.paths.tests,
     ]
 
     for dir_path in dirs_to_create:

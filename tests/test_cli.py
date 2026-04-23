@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -64,12 +65,14 @@ def project_root_failing() -> Path:
 
 
 def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    """Run devflow command in given directory."""
+    """Run devflow command in given directory using the same Python interpreter."""
+    env = {"PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     return subprocess.run(
-        ["devflow"] + args,
+        [sys.executable, "-m", "devflow"] + args,
         capture_output=True,
         text=True,
         cwd=str(cwd),
+        env=env,
     )
 
 
