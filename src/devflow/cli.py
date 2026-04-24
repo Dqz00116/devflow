@@ -439,14 +439,13 @@ def done() -> None:
     if not engine:
         return
 
-    # advance() checks gates and handles both pass (advance) and fail (route/retry)
-    success, next_step, message = engine.advance()
+    result = engine.advance()
 
-    if "complete" in message.lower():
+    if result.is_complete:
         console.print(engine.format_done_result(), markup=False)
         console.print("")
         console.print("[green]Workflow complete![/green]")
-    elif success and next_step:
+    elif result.advanced:
         console.print(engine.format_done_result(), markup=False)
         console.print("")
         console.print(engine.format_current_instruction(), markup=False)
@@ -522,10 +521,32 @@ def approve(item: str) -> None:
     """
     state = StateStore.from_project()
     approved_items = state.get("approved_items", [])
+    if not isinstance(approved_items, list):
+        approved_items = []
     if item not in approved_items:
         approved_items.append(item)
         state.set("approved_items", approved_items)
     console.print(f"[green]Approved: {item}[/green]")
+
+
+def _coerce_value(raw: str):
+    """Coerce string to appropriate Python type for storage in state."""
+    stripped = raw.strip()
+    if stripped == "[]":
+        return []
+    if stripped == "{}":
+        return {}
+    if stripped.lower() in ("true", "false"):
+        return stripped.lower() == "true"
+    try:
+        return int(stripped)
+    except ValueError:
+        pass
+    try:
+        return float(stripped)
+    except ValueError:
+        pass
+    return raw
 
 
 @cli.command()
@@ -539,7 +560,7 @@ def set(key: str, value: str) -> None:
         value: Variable value
     """
     state = StateStore.from_project()
-    state.set(key, value)
+    state.set(key, _coerce_value(value))
     console.print(f"[green]Set: {key}={value}[/green]")
 
 

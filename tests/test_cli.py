@@ -196,6 +196,17 @@ class TestCLIApprove:
         r = _run(["approve", "ITEM-1"], project_root)
         assert "Approved" in r.stdout
 
+    def test_approve_recovers_from_string_corruption(self, project_root: Path) -> None:
+        """approve should not crash when approved_items is stored as string "[]"."""
+        state_path = project_root / ".devflow" / "state.toml"
+        state_path.write_text('approved_items = "[]"\n', encoding="utf-8")
+        r = _run(["approve", "FIXED-ITEM"], project_root)
+        assert r.returncode == 0
+        assert "Approved" in r.stdout
+        # Verify it fixed the state
+        state = toml.load(state_path)
+        assert state["approved_items"] == ["FIXED-ITEM"]
+
 
 class TestCLISet:
     """Test devflow set."""
@@ -204,6 +215,24 @@ class TestCLISet:
         r = _run(["set", "my_key", "my_value"], project_root)
         assert r.returncode == 0
         assert "Set: my_key=my_value" in r.stdout
+
+    def test_set_coerces_empty_list(self, project_root: Path) -> None:
+        """set should coerce '[]' string to an actual list."""
+        r = _run(["set", "approved_items", "[]"], project_root)
+        assert r.returncode == 0
+        state = toml.load(project_root / ".devflow" / "state.toml")
+        assert state["approved_items"] == []
+
+    def test_set_coerces_types(self, project_root: Path) -> None:
+        """set should coerce boolean, integer, and float strings."""
+        r = _run(["set", "flag", "true"], project_root)
+        assert r.returncode == 0
+        state = toml.load(project_root / ".devflow" / "state.toml")
+        assert state["flag"] is True
+
+        _run(["set", "count", "42"], project_root)
+        state = toml.load(project_root / ".devflow" / "state.toml")
+        assert state["count"] == 42
 
 
 class TestCLIBack:
