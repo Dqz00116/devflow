@@ -255,8 +255,8 @@ def check_gate(gate: str, project_root: Path, state: StateStore) -> tuple[bool, 
         var_name = gate[len("state_set:"):]
         return check_state_set(var_name, state)
 
-    # Unknown gate type, pass with warning
-    return True, f"Unknown gate (skipped): {gate}"
+    # Unknown gate type, fail for safety
+    return False, f"Unknown gate type: {gate}"
 
 
 def check_all_gates(

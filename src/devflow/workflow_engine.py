@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,25 @@ from devflow.workflow_parser import FailRoute, Step, Workflow, discover_workflow
 
 if TYPE_CHECKING:
     pass
+
+
+@dataclass
+class AdvanceResult:
+    """Result of advancing a workflow step.
+
+    Attributes:
+        advanced: Whether the engine moved to a new step (True on advance or
+            fail-route, False when gates fail or workflow completes).
+        current_step: The step the engine is now at (None when workflow
+            completes or no step exists).
+        message: Human-readable description of what happened.
+        is_complete: True when the entire workflow is finished (no more steps).
+    """
+
+    advanced: bool
+    current_step: Step | None
+    message: str
+    is_complete: bool = False
 
 
 class WorkflowEngine:
@@ -247,21 +267,18 @@ class WorkflowEngine:
 
         return check_all_gates(resolved_gates, self.project_root, self.state)
 
-    def advance(self) -> tuple[bool, Step | None, str]:
+    def advance(self) -> AdvanceResult:
         """Advance to next step if current is done, or route on failure.
 
         When gates pass: advance to next_step (with cross-workflow support).
         When gates fail: check fail_routes and route if a match is found.
 
         Also stores results for format_done_result() to display.
-
-        Returns:
-            (success, next_step, message)
         """
         current_step = self.get_current_step()
         if not current_step:
             self._last_results = (False, [])
-            return False, None, "No current step"
+            return AdvanceResult(False, None, "No current step")
 
         # Check gates
         all_passed, results = self.check_done()
@@ -273,16 +290,16 @@ class WorkflowEngine:
 
             # Find next step
             if not current_step.next_step:
-                return False, None, "Workflow complete!"
+                return AdvanceResult(False, None, "Workflow complete!", is_complete=True)
 
             # Resolve target (may be cross-workflow)
             target_engine, target_step_id, resolve_msg = self._resolve_target(current_step.next_step)
             if target_engine is None:
-                return False, None, resolve_msg
+                return AdvanceResult(False, None, resolve_msg)
 
             target_step = target_engine.workflow.get_step(target_step_id)
             if target_step is None:
-                return False, None, f"Next step not found: {current_step.next_step}"
+                return AdvanceResult(False, None, f"Next step not found: {current_step.next_step}")
 
             # Handle cross-workflow switch
             if target_engine is not self:
@@ -293,7 +310,7 @@ class WorkflowEngine:
             self._push_step_history(current_step.id)
             self.state.current_step = target_step.id
 
-            return True, target_step, f"Advanced to: {target_step.name}"
+            return AdvanceResult(True, target_step, f"Advanced to: {target_step.name}")
 
         else:
             # Gates failed — compute tentative fail count before persisting
@@ -336,7 +353,7 @@ class WorkflowEngine:
                     # Store routing info for format_done_result
                     self._last_routed_step = target_step
 
-                    return True, target_step, f"Routed on failure: {current_step.name} -> {target_step.name}"
+                    return AdvanceResult(True, target_step, f"Routed on failure: {current_step.name} -> {target_step.name}")
 
             # No fail_route matched — persist the incremented fail count
             self.state.set(key, fail_count)
@@ -344,7 +361,7 @@ class WorkflowEngine:
             self._last_fail_count = fail_count
 
             failed = [msg for passed, msg in results if not passed]
-            return False, current_step, "Gates not satisfied:\n  - " + "\n  - ".join(failed)
+            return AdvanceResult(False, current_step, "Gates not satisfied:\n  - " + "\n  - ".join(failed))
 
     def go_back(self) -> tuple[bool, Step | None, str]:
         """Go back to the previous step using the step history stack.

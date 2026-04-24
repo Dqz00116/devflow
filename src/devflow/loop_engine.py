@@ -148,12 +148,9 @@ class LoopEngine:
                 )
 
             # Validate gates and advance
-            adv_success, next_step, msg = engine.advance()
+            result = engine.advance()
 
-            # Workflow complete is signaled as adv_success=False with a special message
-            is_complete = "workflow complete" in msg.lower()
-
-            if adv_success or is_complete:
+            if result.advanced or result.is_complete:
                 run_id = engine.state.workflow_run_id or "unknown"
                 checkpoint_id = self._checkpoint(task.id, step.id, run_id)
                 self.backlog.mark_done(task.id, checkpoint_id=checkpoint_id)
@@ -161,20 +158,21 @@ class LoopEngine:
                 self.progress.log(
                     f"Completed {task.step_id}. Checkpoint: {checkpoint_id or 'none'}"
                 )
-                if is_complete:
-                    return LoopResult(status="complete", message=msg)
+                if result.is_complete:
+                    return LoopResult(status="complete", message=result.message)
                 # Continue to next iteration
             else:
                 # Check if a fail route was triggered (step changed)
+                next_step = result.current_step
                 if next_step and next_step.id != task.step_id:
                     self.progress.log(
-                        f"Routed on failure: {task.step_id} -> {next_step.id} — {msg}"
+                        f"Routed on failure: {task.step_id} -> {next_step.id} — {result.message}"
                     )
                     # Do not mark done; loop continues with new step
                     continue
 
-                self.progress.log(f"Blocked at {task.step_id}: {msg}")
-                return LoopResult(status="blocked", step=task.step_id, message=msg)
+                self.progress.log(f"Blocked at {task.step_id}: {result.message}")
+                return LoopResult(status="blocked", step=task.step_id, message=result.message)
 
         return LoopResult(
             status="max_iterations_reached",

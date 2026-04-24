@@ -91,18 +91,18 @@ class TestBasicAdvance:
 
         # Create REQ file to pass gate
         (project_root / "docs" / "requirements" / f"REQ-{run_id}.md").write_text("status: draft")
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "req-approve"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "req-approve"
 
     def test_advance_stays_on_gate_fail(self, project_root: Path) -> None:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
         # No REQ file created -> gate fails
-        success, next_step, msg = engine.advance()
-        assert not success
-        assert next_step is not None
-        assert next_step.id == "req-create"  # stays
+        result = engine.advance()
+        assert not result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "req-create"  # stays
 
 
 class TestModeAGateDense:
@@ -129,10 +129,10 @@ class TestModeAGateDense:
         engine.advance()  # -> req-approve
         (project_root / "docs" / "features" / f"FEAT-{run_id}.md").write_text("# Feature")
 
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "brainstorm"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "brainstorm"
 
     def test_code_review_needs_user_approved(self, project_root: Path) -> None:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
@@ -150,8 +150,8 @@ class TestModeAGateDense:
         engine.advance()  # -> code-review (test passes with echo ok)
 
         # Should fail without approval
-        success, _, _ = engine.advance()
-        assert not success
+        result = engine.advance()
+        assert not result.advanced
 
     def test_code_review_passes_with_approval(self, project_root: Path) -> None:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
@@ -169,10 +169,10 @@ class TestModeAGateDense:
         engine.advance()  # -> code-review
 
         engine.state.set("approved_items", [f"CODE-REVIEW-{run_id}"])
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "test-run"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "test-run"
 
     def test_finish_needs_req_status_done(self, project_root: Path) -> None:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
@@ -196,13 +196,13 @@ class TestModeAGateDense:
 
         # Create COMPLETION but REQ still has "status: approved"
         (project_root / "docs" / "completion" / f"COMPLETION-{run_id}.md").write_text("C")
-        success, _, _ = engine.advance()
-        assert not success  # missing status: done
+        result = engine.advance()
+        assert not result.advanced  # missing status: done
 
         # Update REQ to status: done
         (project_root / "docs" / "requirements" / f"REQ-{run_id}.md").write_text("status: done")
-        success, _, msg = engine.advance()
-        assert "complete" in msg.lower()
+        result = engine.advance()
+        assert result.is_complete
 
 
 # ---------------------------------------------------------------------------
@@ -226,11 +226,11 @@ class TestFailRouteRouting:
         engine.advance()  # -> debug-hypothesis
 
         # Gate fails (no HYPOTHESIS file) -> fail_route to debug-root-cause
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "debug-root-cause"
-        assert "Routed on failure" in msg
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "debug-root-cause"
+        assert "Routed on failure" in result.message
 
     def test_fail_count_persists_after_route(
         self, project_root_failing_test: Path
@@ -264,30 +264,30 @@ class TestFailRouteRouting:
         engine.advance()  # -> debug-fix
 
         # Fail 1: should route to debug-root-cause
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "debug-root-cause"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "debug-root-cause"
         assert engine.state.get("debug-fix_fail_count", 0) == 1
 
         # Jump back to debug-fix
         engine.state.current_step = "debug-fix"
 
         # Fail 2: still routes to debug-root-cause
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "debug-root-cause"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "debug-root-cause"
         assert engine.state.get("debug-fix_fail_count", 0) == 2
 
         # Jump back to debug-fix
         engine.state.current_step = "debug-fix"
 
         # Fail 3: ESCALATE to debug-question
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "debug-question"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "debug-question"
         assert engine.state.get("debug-fix_fail_count", 0) == 3
 
     def test_no_fail_route_stays_on_step(
@@ -297,10 +297,10 @@ class TestFailRouteRouting:
         engine = WorkflowEngine.from_workflow("MODE-B", project_root_failing_test)
 
         # debug-root-cause has no fail_routes
-        success, next_step, msg = engine.advance()
-        assert not success
-        assert next_step is not None
-        assert next_step.id == "debug-root-cause"
+        result = engine.advance()
+        assert not result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "debug-root-cause"
 
     def test_fail_count_resets_on_gate_pass(
         self, project_root: Path
@@ -310,15 +310,15 @@ class TestFailRouteRouting:
         run_id = engine.state.workflow_run_id
 
         # Fail once on debug-root-cause
-        success, _, _ = engine.advance()
-        assert not success
+        result = engine.advance()
+        assert not result.advanced
         fc = engine.state.get("debug-root-cause_fail_count", 0)
         assert fc == 1
 
         # Create the file and pass
         (project_root / "docs" / "debug" / f"ROOT-CAUSE-{run_id}.md").write_text("RC")
-        success, _, _ = engine.advance()
-        assert success
+        result = engine.advance()
+        assert result.advanced
         fc = engine.state.get("debug-root-cause_fail_count", 0)
         assert fc == 0  # Reset on pass
 
@@ -350,10 +350,10 @@ class TestCrossWorkflowTransition:
         engine.advance()  # -> debug-finish
 
         # Advance from debug-finish -> cross-workflow to MODE-A:write-plan
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "write-plan"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "write-plan"
 
     def test_cross_workflow_switches_workflow_id(
         self, project_root: Path
@@ -417,10 +417,10 @@ class TestCrossWorkflowTransition:
 
         # Continue in MODE-A
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("Plan")
-        success, next_step, msg = engine.advance()
-        assert success
-        assert next_step is not None
-        assert next_step.id == "implement-sdd"
+        result = engine.advance()
+        assert result.advanced
+        assert result.current_step is not None
+        assert result.current_step.id == "implement-sdd"
 
 
 # ---------------------------------------------------------------------------
@@ -452,8 +452,8 @@ class TestEdgeCases:
         )
 
         engine = WorkflowEngine.from_workflow("BAD", root)
-        success, next_step, msg = engine.advance()
-        assert not success
+        result = engine.advance()
+        assert not result.advanced
         captured = capsys.readouterr()
         assert "Warning" in captured.out
 
@@ -474,9 +474,9 @@ class TestEdgeCases:
         )
 
         engine = WorkflowEngine.from_workflow("CROSS", root)
-        success, next_step, msg = engine.advance()
-        assert not success
-        assert "not found" in msg.lower()
+        result = engine.advance()
+        assert not result.advanced
+        assert "not found" in result.message.lower()
 
         shutil.rmtree(tmpdir, ignore_errors=True)
 

@@ -200,9 +200,9 @@ class TestCheckGate:
         passed, msg = check_gate("state_set:my_var", Path.cwd(), state)
         assert passed
 
-    def test_unknown_gate_type_passes(self, state: StateStore) -> None:
+    def test_unknown_gate_type_fails(self, state: StateStore) -> None:
         passed, msg = check_gate("unknown_type:something", Path.cwd(), state)
-        assert passed
+        assert not passed
         assert "Unknown" in msg
 
 
