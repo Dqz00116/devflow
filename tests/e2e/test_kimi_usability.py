@@ -102,9 +102,8 @@ def _discover_invocation(
     if tool_id == "kimi":
         presets = [
             (["--print", "--yolo", "--input-format", "text", "--max-steps-per-turn", "100"], {}),
-            (["-c"], {}),
-            (["chat", "-c"], {}),
-            (["run"], {}),
+            (["--print", "--yolo", "--input-format", "text"], {}),
+            (["--print"], {}),
         ]
     elif tool_id == "claude":
         presets = [
@@ -554,7 +553,7 @@ def _run_tool(
         env=env,
         capture_output=True,
         text=True,
-        timeout=900,
+        timeout=1200,
     )
 
 
