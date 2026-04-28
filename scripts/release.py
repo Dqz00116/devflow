@@ -157,7 +157,7 @@ def verify_artifacts(version: str, artifacts: list[Path]) -> None:
         f"agent_devflow-{version}-py3-none-any.whl",
         f"agent_devflow-{version}.tar.gz",
     }
-    actual = {a.name for a in artifacts}
+    actual = {a.name for a in artifacts if a.name != ".gitignore"}
     if actual != expected:
         print(f"Artifact mismatch!", file=sys.stderr)
         print(f"  Expected: {sorted(expected)}", file=sys.stderr)
