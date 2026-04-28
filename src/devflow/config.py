@@ -18,7 +18,7 @@ class ProjectConfig:
     name: str = ""
     language: str = "python"
     stack: str = ""
-    version: str = "0.1.5"
+    version: str = "0.1.6"
 
 
 @dataclass
