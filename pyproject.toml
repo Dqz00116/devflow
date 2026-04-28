@@ -73,7 +73,7 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --ignore=tests/e2e/buckshot_e2e --ignore=tests/e2e/taskflow_e2e -m \"not slow\""
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]

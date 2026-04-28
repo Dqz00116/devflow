@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from devflow import __version__
 from devflow.config import CommandConfig, DevFlowConfig, ProjectConfig, get_preset
 
 
@@ -17,7 +18,7 @@ class TestProjectConfig:
         assert config.name == ""
         assert config.language == "python"
         assert config.stack == ""
-        assert config.version == "0.1.0"
+        assert config.version == __version__
 
 
 class TestDevFlowConfig:
