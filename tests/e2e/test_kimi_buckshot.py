@@ -302,11 +302,11 @@ def _setup_project() -> str:
         'name = "E2E Feature Development"\n'
         'extends = ["MODE-A"]\n\n'
         '[[steps]]\n'
-        'id = "implement-sdd"\n'
-        'name = "Implement with SDD"\n'
-        'prompt_file = "prompts/implement-sdd.md"\n'
+        'id = "implement-verify"\n'
+        'name = "Implement and Verify"\n'
+        'prompt_file = "mode-a/implement-verify.md"\n'
         'gates = ["command_success:{test_command}"]\n'
-        'next = "code-review"\n'
+        'next = "finish"\n'
         "[[steps.fail_route]]\n"
         "min_fails = 2\n"
         'target = "MODE-B:debug-root-cause"\n',
@@ -513,10 +513,8 @@ def _build_prompt(run_id: str) -> str:
         f"`docs/features/FEAT-{run_id}.md`\n"
         f"- brainstorm: needs `docs/superpowers/specs/DESIGN-{run_id}.md`\n"
         f"- write-plan: needs `docs/superpowers/plans/PLAN-{run_id}.md`\n"
-        "- implement-sdd: `pytest tests/test_app.py -v` must pass\n"
-        f"- code-review: run `devflow approve CODE-REVIEW-{run_id}` then done\n"
-        "- test-run: tests must pass\n"
-        f"- verify: needs `docs/evidence/EVIDENCE-{run_id}.md`\n"
+        "- implement-verify: `pytest tests/test_app.py -v` must pass and "
+        f"needs `docs/evidence/EVIDENCE-{run_id}.md`\n"
         "- finish: needs `docs/completion/COMPLETION-{run_id}.md` + "
         "REQ file containing `status: done`\n\n"
         "STEP-BY-STEP GUIDE:\n"
@@ -526,10 +524,10 @@ def _build_prompt(run_id: str) -> str:
         "   b. Do the step\n"
         "   c. `devflow done`\n"
         "   d. Fix any gate failures and repeat c\n"
-        "3. When you reach `implement-sdd`, write the FastAPI game backend "
-        "and Three.js frontend, then run tests until they pass.\n"
-        f"4. For `code-review`, self-approve with "
-        f"`devflow approve CODE-REVIEW-{run_id}`.\n"
+        "3. When you reach `implement-verify`, write the FastAPI game backend "
+        "and Three.js frontend, then run tests until they pass and create the evidence file.\n"
+        f"4. For `implement-verify`, once implementation is done, "
+        f"ensure `docs/evidence/EVIDENCE-{run_id}.md` is created.\n"
         "5. For `finish`, update the REQ file to include "
         "`status: done` and create the COMPLETION file.\n\n"
         "IMPORTANT: Start by running `devflow select-workflow E2E-MODE-A` "

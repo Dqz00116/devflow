@@ -167,8 +167,8 @@ def init_project_templates(project_root: Path, config: DevFlowConfig) -> list[Pa
                 created_files.append(dest_path)
 
     if prompts_dir.exists():
-        for md_file in prompts_dir.glob("*.md"):
-            dest_path = project_root / ".devflow" / "prompts" / md_file.name
+        for md_file in prompts_dir.rglob("*.md"):
+            dest_path = project_root / ".devflow" / "prompts" / md_file.relative_to(prompts_dir)
             if not dest_path.exists():
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 dest_path.write_text(md_file.read_text(encoding="utf-8"), encoding="utf-8")

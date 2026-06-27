@@ -329,11 +329,11 @@ def _setup_project() -> str:
         'name = "E2E Feature Development"\n'
         'extends = ["MODE-A"]\n\n'
         '[[steps]]\n'
-        'id = "implement-sdd"\n'
-        'name = "Implement with SDD"\n'
-        'prompt_file = "prompts/implement-sdd.md"\n'
+        'id = "implement-verify"\n'
+        'name = "Implement and Verify"\n'
+        'prompt_file = "mode-a/implement-verify.md"\n'
         'gates = ["command_success:{test_command}"]\n'
-        'next = "code-review"\n'
+        'next = "finish"\n'
         "[[steps.fail_route]]\n"
         "min_fails = 2\n"
         'target = "MODE-B:debug-root-cause"\n',

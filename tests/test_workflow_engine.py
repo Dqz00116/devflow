@@ -138,7 +138,7 @@ class TestModeAGateDense:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
         run_id = engine.state.workflow_run_id
 
-        # Navigate to code-review
+        # Navigate to implement-verify
         (project_root / "docs" / "requirements" / f"REQ-{run_id}.md").write_text("status: approved")
         (project_root / "docs" / "features" / f"FEAT-{run_id}.md").write_text("F")
         engine.advance()  # -> req-approve
@@ -146,18 +146,18 @@ class TestModeAGateDense:
         (project_root / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id}.md").write_text("D")
         engine.advance()  # -> write-plan
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("P")
-        engine.advance()  # -> implement-sdd
-        engine.advance()  # -> code-review (test passes with echo ok)
+        engine.advance()  # -> implement-verify
 
-        # Should fail without approval
+        # implement-verify has command_success + EVIDENCE gates.
+        # First advance passes command_success (echo ok) but fails EVIDENCE gate.
         result = engine.advance()
-        assert not result.advanced
+        assert not result.advanced  # missing EVIDENCE file
 
     def test_code_review_passes_with_approval(self, project_root: Path) -> None:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
         run_id = engine.state.workflow_run_id
 
-        # Navigate to code-review
+        # Navigate to implement-verify
         (project_root / "docs" / "requirements" / f"REQ-{run_id}.md").write_text("status: approved")
         (project_root / "docs" / "features" / f"FEAT-{run_id}.md").write_text("F")
         engine.advance()  # -> req-approve
@@ -165,14 +165,15 @@ class TestModeAGateDense:
         (project_root / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id}.md").write_text("D")
         engine.advance()  # -> write-plan
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("P")
-        engine.advance()  # -> implement-sdd
-        engine.advance()  # -> code-review
+        engine.state.set("review_plan_spec_consistency_passed", "true")
+        engine.advance()  # -> implement-verify
 
-        engine.state.set("approved_items", [f"CODE-REVIEW-{run_id}"])
+        # Create EVIDENCE file to satisfy implement-verify gate.
+        (project_root / "docs" / "evidence" / f"EVIDENCE-{run_id}.md").write_text("E")
         result = engine.advance()
         assert result.advanced
         assert result.current_step is not None
-        assert result.current_step.id == "test-run"
+        assert result.current_step.id == "finish"
 
     def test_finish_needs_req_status_done(self, project_root: Path) -> None:
         engine = WorkflowEngine.from_workflow("MODE-A", project_root)
@@ -186,12 +187,10 @@ class TestModeAGateDense:
         (project_root / "docs" / "superpowers" / "specs" / f"DESIGN-{run_id}.md").write_text("D")
         engine.advance()  # -> write-plan
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("P")
-        engine.advance()  # -> implement-sdd
-        engine.advance()  # -> code-review
-        engine.state.set("approved_items", [f"CODE-REVIEW-{run_id}"])
-        engine.advance()  # -> test-run
-        engine.advance()  # -> verify
+        engine.state.set("review_plan_spec_consistency_passed", "true")
+        engine.advance()  # -> implement-verify
         (project_root / "docs" / "evidence" / f"EVIDENCE-{run_id}.md").write_text("E")
+        engine.advance()  # implement-verify (passes command_success + EVIDENCE)
         engine.advance()  # -> finish
 
         # Create COMPLETION but REQ still has "status: approved"
@@ -417,10 +416,11 @@ class TestCrossWorkflowTransition:
 
         # Continue in MODE-A
         (project_root / "docs" / "superpowers" / "plans" / f"PLAN-{run_id}.md").write_text("Plan")
+        engine.state.set("review_plan_spec_consistency_passed", "true")
         result = engine.advance()
         assert result.advanced
         assert result.current_step is not None
-        assert result.current_step.id == "implement-sdd"
+        assert result.current_step.id == "implement-verify"
 
 
 # ---------------------------------------------------------------------------
@@ -721,10 +721,8 @@ class TestSurjection:
         assert "approved" in str(s["req-approve"].gates)
         # FEAT gate
         assert "file_exists:docs/features/FEAT" in str(s["req-approve"].gates)
-        # Code review gate
-        assert "user_approved:CODE-REVIEW" in str(s["code-review"].gates)
-        # Test run gates
-        assert "command_success:{test_command}" in str(s["test-run"].gates)
+        # Implement-verify gate: test command
+        assert "command_success:{test_command}" in str(s["implement-verify"].gates)
         # Finish gate with status: done
         gate_str = str(s["finish"].gates)
         assert "file_contains:docs/requirements/REQ" in gate_str

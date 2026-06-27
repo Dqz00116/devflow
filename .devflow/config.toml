@@ -2,7 +2,7 @@
 name = "DevFlow"
 language = "python"
 stack = "Python 3.x"
-version = "0.1.0"
+version = "0.1.7"
 
 [commands]
 build = "python -m build"

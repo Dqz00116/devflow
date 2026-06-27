@@ -1,1 +1,1 @@
-"""Default workflow and prompt data for DevFlow v2.0."""
+"""Default workflow and prompt data for DevFlow v3.0."""

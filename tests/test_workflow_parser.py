@@ -296,7 +296,7 @@ class TestBundledWorkflows:
         w = parse_workflow(p)
         assert w is not None
         assert w.id == "MODE-A"
-        assert len(w.steps) == 9
+        assert len(w.steps) == 6
 
     def test_mode_b_parses_with_fail_routes(self) -> None:
         p = Path("src/devflow/data/workflows/MODE-B.toml")
@@ -329,12 +329,12 @@ class TestBundledWorkflows:
         gate_str = str(approve.gates)
         assert "file_exists:docs/features/FEAT" in gate_str
 
-    def test_mode_a_code_review_has_user_approved(self) -> None:
+    def test_mode_a_implement_verify_has_test_command(self) -> None:
         p = Path("src/devflow/data/workflows/MODE-A.toml")
         w = parse_workflow(p)
-        review = w.get_step("code-review")
-        gate_str = str(review.gates)
-        assert "user_approved:CODE-REVIEW" in gate_str
+        iv = w.get_step("implement-verify")
+        gate_str = str(iv.gates)
+        assert "command_success:{test_command}" in gate_str
 
     def test_mode_a_finish_has_status_done(self) -> None:
         p = Path("src/devflow/data/workflows/MODE-A.toml")
