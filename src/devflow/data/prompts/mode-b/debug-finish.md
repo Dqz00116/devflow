@@ -29,14 +29,14 @@ Subagent compiles all debug artifacts into completion document
 
 ## Output
 
-- `docs/debug/COMPLETION-{workflow_run_id}.md`
+- `docs/debug/SUMMARY-{workflow_run_id}.md`
 - Presentation to user
 
 ## Procedure
 
-- **Compile completion document** (subagent): `docs/debug/COMPLETION-{workflow_run_id}.md`:
+- **Compile summary document** (subagent): `docs/debug/SUMMARY-{workflow_run_id}.md`:
   ```markdown
-  # Debug Completion - {workflow_run_id}
+  # Debug Summary - {workflow_run_id}
   ## Bug [one line]
   ## Debug Summary (Root Cause, Pattern Identified, Fix Applied, Verification)
   ## Artifacts (table: Document | Path)
@@ -57,7 +57,7 @@ Subagent compiles all debug artifacts into completion document
 
 ## Gate
 
-- `file_exists:docs/debug/COMPLETION-{workflow_run_id}.md`
+- `file_exists:docs/debug/SUMMARY-{workflow_run_id}.md`
 
 ## Cross-Workflow Transition
 
@@ -66,6 +66,6 @@ After success, workflow engine transitions **automatically** to `MODE-A:write-pl
 ## Completion Criteria
 
 - All debug phase documents exist on disk
-- COMPLETION doc summarizes the full debug run
+- SUMMARY doc summarizes the full debug run
 - User presented with clear summary
 - Workflow transitions to MODE-A:write-plan

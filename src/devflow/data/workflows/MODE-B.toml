@@ -79,5 +79,5 @@ next = "debug-finish"
 id = "debug-finish"
 name = "Complete Debug"
 prompt_file = "mode-b/debug-finish.md"
-gates = ["file_exists:docs/debug/COMPLETION-{workflow_run_id}.md"]
+gates = ["file_exists:docs/debug/SUMMARY-{workflow_run_id}.md"]
 next = "MODE-A:write-plan"
