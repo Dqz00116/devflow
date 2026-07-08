@@ -102,13 +102,3 @@ Fail count persists across visits (resets only when gates pass).
 | Skipping `devflow done` | All advancement must go through `devflow done` |
 | Ignoring gate failures | Fix the issue, then `devflow done` again |
 
-## 5 Iron Laws
-
-| # | Law | Severity |
-|---|-----|----------|
-| 1 | Read `using-superpowers` skill first | Rigid |
-| 2 | TDD: Test before code | Rigid |
-| 3 | Verify before claim | Rigid |
-| 4 | Root cause before fix | Strong |
-| 5 | Debug → Repeat full cycle | Strong |
-
