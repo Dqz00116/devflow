@@ -46,6 +46,11 @@ VERSION_SOURCES: list[tuple[Path, str, str]] = [
         r'^(\s+)version:\s*str\s*=\s*"([^"]+)"',
         r'^(\s+version:\s*str\s*=\s*")([^"]+)(")',
     ),
+    (
+        PROJECT_ROOT / ".devflow" / "config.toml",
+        r'^version\s*=\s*"([^"]+)"',
+        r'^(version\s*=\s*")([^"]+)(")',
+    ),
 ]
 
 
