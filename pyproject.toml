@@ -77,3 +77,8 @@ addopts = "-v --tb=short --ignore=tests/e2e/buckshot_e2e --ignore=tests/e2e/task
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
+
+[dependency-groups]
+dev = [
+    "twine>=6.2.0",
+]
